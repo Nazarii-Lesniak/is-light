@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+nodeLinker: hoisted
+
+allowBuilds:
+  "@biomejs/biome": true
+  "esbuild": true

@@ -1,0 +1,30 @@
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+expo-env.d.ts
+android/
+ios/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Firebase credentials & Service Account private keys
+*firebase-adminsdk*.json
+*-firebase-*.json
+service-account*.json
+*serviceAccount*.json
+fcm-*.json
+google-services.json
+GoogleService-Info.plist
+
+*.log
+.DS_Store
+Thumbs.db
+
+instruction.md
+instruction.part2.md

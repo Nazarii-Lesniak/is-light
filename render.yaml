@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: is-light-api
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:server
+    startCommand: pnpm --filter @is-light/server start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+      - key: LOE_API_BASE_URL
+        value: https://api.loe.lviv.ua/api
+      - key: LOE_POWER_API_BASE_URL
+        value: https://power-api.loe.lviv.ua/api
+      - key: LOE_LVIV_CITY_ID
+        value: "693"
+      - key: CORS_ORIGIN
+        value: "*"

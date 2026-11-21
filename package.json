@@ -1,0 +1,23 @@
+{
+  "name": "is-light-monorepo",
+  "private": true,
+  "packageManager": "pnpm@12.18.0",
+  "scripts": {
+    "build:shared": "pnpm --filter @is-light/shared build",
+    "build:server": "pnpm --filter @is-light/shared build && pnpm --filter @is-light/server build",
+    "dev:server": "pnpm --filter @is-light/server dev",
+    "dev:mobile": "pnpm --filter @is-light/mobile start",
+    "db:generate": "pnpm --filter @is-light/server db:generate",
+    "db:push": "pnpm --filter @is-light/server db:push",
+    "test:server": "pnpm --filter @is-light/server test",
+    "typecheck": "pnpm --filter @is-light/shared typecheck && pnpm --filter @is-light/server typecheck && pnpm --filter @is-light/mobile typecheck",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.8.3"
+  }
+}
