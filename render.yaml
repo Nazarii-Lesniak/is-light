@@ -3,8 +3,8 @@ services:
     name: is-light-api
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build:server
-    startCommand: pnpm --filter @is-light/server start
+    buildCommand: npx -y pnpm@12.18.0 install --prod=false --frozen-lockfile --filter . --filter @is-light/server... && npx -y pnpm@12.18.0 build:server
+    startCommand: node apps/server/dist/index.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
