@@ -11,6 +11,17 @@ export const LVIV_TIMEZONE = 'Europe/Kyiv';
 
 const GROUP_ID_SET: ReadonlySet<string> = new Set(GROUP_IDS);
 
+const kyivDateTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: LVIV_TIMEZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hour12: false,
+});
+
 export interface HourCell {
   hour: number;
   label: string;
@@ -103,9 +114,9 @@ export function slotsToHourCells(slots: readonly SlotStatus[]): HourCell[] {
       state = 'off';
     } else if (firstHalf === 'on' && secondHalf === 'on') {
       state = 'on';
-    } else if (firstHalf === 'off') {
+    } else if (firstHalf === 'off' && secondHalf === 'on') {
       state = 'off_first_half';
-    } else if (secondHalf === 'off') {
+    } else if (firstHalf === 'on' && secondHalf === 'off') {
       state = 'off_second_half';
     } else {
       state = 'unknown';
@@ -124,18 +135,7 @@ export function slotsToHourCells(slots: readonly SlotStatus[]): HourCell[] {
 }
 
 export function getKyivDateParts(date: Date): KyivDateParts {
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: LVIV_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
-
-  const parts = formatter.formatToParts(date);
+  const parts = kyivDateTimeFormatter.formatToParts(date);
   const map: Record<string, number> = {};
   for (const part of parts) {
     if (part.type !== 'literal') {
@@ -195,10 +195,6 @@ export function getKyivCurrentHour(date: Date): number {
   return getKyivDateParts(date).hour;
 }
 
-/**
- * Converts a Kyiv local date string (YYYY-MM-DD) and half-hour slot index (0..48)
- * to an exact UTC Date instance, respecting EET (UTC+2) / EEST (UTC+3) DST offsets.
- */
 export function kyivDateAndSlotToUtcDate(dateStr: string, slotIndex: number): Date {
   const dayOffset = Math.floor(slotIndex / SLOT_COUNT);
   const slotInDay = ((slotIndex % SLOT_COUNT) + SLOT_COUNT) % SLOT_COUNT;
@@ -211,7 +207,6 @@ export function kyivDateAndSlotToUtcDate(dateStr: string, slotIndex: number): Da
   const hour = Math.floor(slotInDay / 2);
   const minute = (slotInDay % 2) * 30;
 
-  // Start with UTC guess and adjust iteratively using Kyiv wall clock difference
   const desiredUtcWallMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
   let candidateMs = desiredUtcWallMs - 2 * 60 * 60 * 1000;
 
@@ -255,7 +250,11 @@ function buildTimeline(today: DaySchedule | null, tomorrow: DaySchedule | null):
     }
   }
 
-  if (tomorrow?.isPublished) {
+  const canAppendTomorrow =
+    Boolean(tomorrow?.isPublished) &&
+    (!today?.isPublished || tomorrow?.date === addDaysToDateString(today.date, 1));
+
+  if (canAppendTomorrow && tomorrow) {
     for (let i = 0; i < SLOT_COUNT; i++) {
       timeline.push({
         date: tomorrow.date,
