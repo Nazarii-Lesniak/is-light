@@ -19,6 +19,8 @@ interface LocationPickerModalProps {
   onClose: () => void;
 }
 
+const SEARCH_THRESHOLD = 20;
+
 export function LocationPickerModal({ visible, onClose }: LocationPickerModalProps) {
   const theme = useAppTheme();
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,7 +29,12 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
   const primaryLocationId = useAppStore((s) => s.primaryLocationId);
   const setPrimaryLocation = useAppStore((s) => s.setPrimaryLocation);
 
+  const showSearch = locations.length > SEARCH_THRESHOLD;
+
   const filteredLocations = useMemo(() => {
+    if (!showSearch) {
+      return locations;
+    }
     const q = searchQuery.trim().toLowerCase();
     if (!q) {
       return locations;
@@ -37,7 +44,7 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
         `${item.label ?? ''} ${item.fullAddress} група ${item.groupId}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [locations, searchQuery]);
+  }, [locations, searchQuery, showSearch]);
 
   const handleClose = () => {
     setSearchQuery('');
@@ -56,43 +63,45 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
       onClose={handleClose}
       title="Основна локація"
       subtitle="Оберіть адресу для головного екрану та сповіщень"
-      avoidKeyboard
+      avoidKeyboard={showSearch}
       maxHeightRatio={0.82}
     >
-      <View
-        style={[
-          styles.searchBox,
-          CONTINUOUS_CORNER,
-          {
-            backgroundColor: theme.surfaceInput,
-            borderColor: isSearchFocused ? theme.accent : theme.border,
-            borderWidth: isSearchFocused ? 1.5 : LAYOUT.borderWidth,
-          },
-        ]}
-      >
-        <Search size={18} color={isSearchFocused ? theme.accent : theme.textMuted} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          onFocus={() => setIsSearchFocused(true)}
-          onBlur={() => setIsSearchFocused(false)}
-          placeholder="Пошук серед збережених адрес…"
-          placeholderTextColor={theme.textMuted}
-          style={[TYPOGRAPHY.body, styles.searchInput, { color: theme.text }]}
-        />
-        {searchQuery.length > 0 ? (
-          <Pressable
-            onPress={() => setSearchQuery('')}
-            hitSlop={HIT_SLOP_STANDARD}
-            accessibilityLabel="Очистити пошук"
-          >
-            <X size={16} color={theme.textMuted} />
-          </Pressable>
-        ) : null}
-      </View>
+      {showSearch ? (
+        <View
+          style={[
+            styles.searchBox,
+            CONTINUOUS_CORNER,
+            {
+              backgroundColor: theme.surfaceInput,
+              borderColor: isSearchFocused ? theme.accent : theme.border,
+              borderWidth: isSearchFocused ? 1.5 : LAYOUT.borderWidth,
+            },
+          ]}
+        >
+          <Search size={18} color={isSearchFocused ? theme.accent : theme.textMuted} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
+            placeholder="Пошук серед збережених адрес…"
+            placeholderTextColor={theme.textMuted}
+            style={[TYPOGRAPHY.body, styles.searchInput, { color: theme.text }]}
+          />
+          {searchQuery.length > 0 ? (
+            <Pressable
+              onPress={() => setSearchQuery('')}
+              hitSlop={HIT_SLOP_STANDARD}
+              accessibilityLabel="Очистити пошук"
+            >
+              <X size={16} color={theme.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
 
       <ScrollView
-        style={styles.list}
+        style={[styles.list, showSearch ? styles.listWithSearch : undefined]}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -192,8 +201,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   list: {
-    marginTop: SPACING.sm,
     maxHeight: 360,
+  },
+  listWithSearch: {
+    marginTop: SPACING.sm,
   },
   listContent: {
     gap: SPACING.xs + 2,
