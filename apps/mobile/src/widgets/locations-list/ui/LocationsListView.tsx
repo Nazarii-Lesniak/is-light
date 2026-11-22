@@ -11,6 +11,7 @@ import {
   getInteractiveTokens,
 } from '@/shared/theme/tokens';
 import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
+import { GlassBackdrop } from '@/shared/ui/GlassBackdrop';
 import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { useRouter } from 'expo-router';
 import {
@@ -116,6 +117,7 @@ export function LocationsListView() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
+      <GlassBackdrop />
       <View style={styles.header}>
         <View style={styles.headerTitleWrap}>
           <Text style={[TYPOGRAPHY.largeTitle, { color: theme.text }]}>Збережені адреси</Text>
@@ -125,18 +127,6 @@ export function LocationsListView() {
             Львівська область · {locations.length} {locationWord}
           </Text>
         </View>
-
-        <InteractiveSurface
-          onPress={() => router.push('/(tabs)/add')}
-          accessibilityRole="button"
-          accessibilityLabel="Додати нову адресу"
-          rippleTone="accent"
-          borderRadius={RADII.pill}
-          style={elevation.subtle}
-          contentStyle={[styles.addCircleButton, { backgroundColor: theme.accent }]}
-        >
-          <Plus size={20} color={theme.accentOnSolid} strokeWidth={2.4} />
-        </InteractiveSurface>
       </View>
 
       {locations.length === 0 ? (
@@ -448,13 +438,6 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 2,
-  },
-  addCircleButton: {
-    width: LAYOUT.iconButtonVisualSize,
-    height: LAYOUT.iconButtonVisualSize,
-    borderRadius: RADII.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emptyWrap: {
     flex: 1,
