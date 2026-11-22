@@ -22,7 +22,6 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 interface CurrentStatusCardProps {
   today: DaySchedule | null;
   tomorrow: DaySchedule | null;
-  updatedAt: string | null;
   isOffline: boolean;
   isLoading?: boolean;
 }
@@ -30,7 +29,6 @@ interface CurrentStatusCardProps {
 export function CurrentStatusCard({
   today,
   tomorrow,
-  updatedAt,
   isOffline,
   isLoading = false,
 }: CurrentStatusCardProps) {
@@ -204,12 +202,17 @@ export function CurrentStatusCard({
       ? `через ${formatCountdownUk(summary.msUntilChange)}`
       : null;
 
-  let fallbackDescription = 'До кінця доступного графіка змін не заплановано';
+  let fallbackDescription: string | null = null;
   if (!hasPublishedToday) {
     fallbackDescription = 'Графік відключень на сьогодні не застосовується';
   } else if (isUnknownWithSchedule) {
     fallbackDescription = 'Потягніть вниз, щоб оновити графік на поточну добу';
   }
+
+  const hasBodyContent = Boolean(
+    (hasCountdown && nextActionKicker && countdownHeroValue) || fallbackDescription,
+  );
+  const hasFooterContent = isOffline || Boolean(today?.sourceInfo);
 
   return (
     <View
@@ -267,64 +270,63 @@ export function CurrentStatusCard({
         </View>
       </View>
 
-      <View style={styles.body}>
-        {hasCountdown && nextActionKicker && countdownHeroValue ? (
-          <>
-            <View style={styles.kickerRow}>
-              <Clock size={14} color={iconColor} strokeWidth={2} />
-              <Text style={[TYPOGRAPHY.callout, TABULAR_NUMS, { color: textColor, opacity: 0.88 }]}>
-                {nextActionKicker}
+      {hasBodyContent ? (
+        <View style={styles.body}>
+          {hasCountdown && nextActionKicker && countdownHeroValue ? (
+            <>
+              <View style={styles.kickerRow}>
+                <Clock size={14} color={iconColor} strokeWidth={2} />
+                <Text
+                  style={[TYPOGRAPHY.callout, TABULAR_NUMS, { color: textColor, opacity: 0.88 }]}
+                >
+                  {nextActionKicker}
+                </Text>
+              </View>
+              <Text style={[TYPOGRAPHY.metricHero, styles.heroText, { color: textColor }]}>
+                {countdownHeroValue}
               </Text>
-            </View>
-            <Text style={[TYPOGRAPHY.metricHero, styles.heroText, { color: textColor }]}>
-              {countdownHeroValue}
-            </Text>
-          </>
-        ) : (
-          <>
-            <Text style={[TYPOGRAPHY.title2, { color: textColor }]}>{statusBadgeLabel}</Text>
+            </>
+          ) : fallbackDescription ? (
             <Text style={[TYPOGRAPHY.callout, styles.fallbackDesc, { color: textColor }]}>
               {fallbackDescription}
             </Text>
-          </>
-        )}
-      </View>
+          ) : null}
+        </View>
+      ) : null}
 
-      <View
-        style={[
-          styles.footer,
-          {
-            borderTopColor: borderColor,
-          },
-        ]}
-      >
-        <Text style={[TYPOGRAPHY.footnote, TABULAR_NUMS, { color: theme.textSecondary }]}>
-          {updatedAt ? `Оновлено о ${formatKyivTime(updatedAt)}` : 'Ще не синхронізовано'}
-        </Text>
-
-        {isOffline ? (
-          <View
-            style={[
-              styles.offlinePill,
-              CONTINUOUS_CORNER,
-              {
-                backgroundColor: theme.warningBg,
-                borderColor: theme.warningBorder,
-              },
-            ]}
-          >
-            <WifiOff size={11} color={theme.warningText} />
-            <Text style={[TYPOGRAPHY.caption, { color: theme.warningText }]}>Офлайн-кеш</Text>
-          </View>
-        ) : today?.sourceInfo ? (
-          <Text
-            style={[TYPOGRAPHY.footnote, styles.sourceInfo, { color: theme.textMuted }]}
-            numberOfLines={1}
-          >
-            {today.sourceInfo}
-          </Text>
-        ) : null}
-      </View>
+      {hasFooterContent ? (
+        <View
+          style={[
+            styles.footer,
+            {
+              borderTopColor: borderColor,
+            },
+          ]}
+        >
+          {isOffline ? (
+            <View
+              style={[
+                styles.offlinePill,
+                CONTINUOUS_CORNER,
+                {
+                  backgroundColor: theme.warningBg,
+                  borderColor: theme.warningBorder,
+                },
+              ]}
+            >
+              <WifiOff size={11} color={theme.warningText} />
+              <Text style={[TYPOGRAPHY.caption, { color: theme.warningText }]}>Офлайн-кеш</Text>
+            </View>
+          ) : today?.sourceInfo ? (
+            <Text
+              style={[TYPOGRAPHY.footnote, styles.sourceInfo, { color: theme.textMuted }]}
+              numberOfLines={1}
+            >
+              {today.sourceInfo}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -376,7 +378,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xxs,
   },
   fallbackDesc: {
-    marginTop: SPACING.xxs + 2,
     opacity: 0.85,
   },
   footer: {
@@ -385,7 +386,6 @@ const styles = StyleSheet.create({
     borderTopWidth: LAYOUT.borderWidth,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     gap: SPACING.sm,
   },
   offlinePill: {
@@ -399,7 +399,6 @@ const styles = StyleSheet.create({
   },
   sourceInfo: {
     flexShrink: 1,
-    textAlign: 'right',
   },
   skeletonPill: {
     width: 152,

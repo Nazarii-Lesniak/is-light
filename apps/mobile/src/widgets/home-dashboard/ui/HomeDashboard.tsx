@@ -374,7 +374,6 @@ export function HomeDashboard() {
         <CurrentStatusCard
           today={todaySchedule}
           tomorrow={tomorrowSchedule}
-          updatedAt={currentSchedule?.updatedAt ?? null}
           isOffline={isOfflineCache}
           isLoading={isInitialLoading && !currentSchedule}
         />
