@@ -14,9 +14,10 @@ import {
   getInteractiveTokens,
 } from '@/shared/theme/tokens';
 import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
+import { GlassBackdrop } from '@/shared/ui/GlassBackdrop';
 import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { type AddressSearchItem, type CityItem, LVIV_CITY_ID } from '@is-light/shared';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Building2, Check, ChevronDown, MapPin, Search, Tag, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -113,6 +114,23 @@ const DEFAULT_CITY: CityItem = {
   name: 'Львів',
   otgName: 'Львівська',
 };
+
+const VISIBLE_EXAMPLES_COUNT = 5;
+
+function pickRandomExamples(source: readonly string[], count: number): string[] {
+  const pool = [...source];
+  const target = Math.min(count, pool.length);
+  for (let i = 0; i < target; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    const current = pool[i];
+    const swap = pool[j];
+    if (current !== undefined && swap !== undefined) {
+      pool[i] = swap;
+      pool[j] = current;
+    }
+  }
+  return pool.slice(0, target);
+}
 
 export function AddLocationView() {
   const router = useRouter();
@@ -283,11 +301,20 @@ export function AddLocationView() {
     commitLocation(false);
   };
 
-  const quickExamples =
-    selectedCity.id === LVIV_CITY_ID ? LVIV_QUICK_EXAMPLES : OBLAST_QUICK_EXAMPLES;
+  const [quickExamples, setQuickExamples] = useState<string[]>(() =>
+    pickRandomExamples(LVIV_QUICK_EXAMPLES, VISIBLE_EXAMPLES_COUNT),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const pool = selectedCity.id === LVIV_CITY_ID ? LVIV_QUICK_EXAMPLES : OBLAST_QUICK_EXAMPLES;
+      setQuickExamples(pickRandomExamples(pool, VISIBLE_EXAMPLES_COUNT));
+    }, [selectedCity.id]),
+  );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
+      <GlassBackdrop />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
