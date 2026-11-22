@@ -31,7 +31,8 @@ interface SegmentedControlProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-const TRACK_PADDING = 3;
+const TRACK_PADDING = 2;
+const SEGMENT_HIT_SLOP = { top: 6, bottom: 6, left: 0, right: 0 } as const;
 
 export function SegmentedControl<T extends string>({
   options,
@@ -114,6 +115,7 @@ export function SegmentedControl<T extends string>({
         return (
           <Pressable
             key={option.value}
+            hitSlop={SEGMENT_HIT_SLOP}
             onPress={() => {
               if (!isSelected) {
                 onChange(option.value);
@@ -136,7 +138,7 @@ export function SegmentedControl<T extends string>({
               <Text
                 numberOfLines={1}
                 style={[
-                  TYPOGRAPHY.callout,
+                  TYPOGRAPHY.footnote,
                   {
                     fontWeight: isSelected ? '600' : '500',
                     color: isSelected ? theme.text : theme.textMuted,
@@ -168,36 +170,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     position: 'relative',
     padding: TRACK_PADDING,
-    borderRadius: RADII.lg,
+    borderRadius: RADII.md,
     borderWidth: LAYOUT.borderWidth,
-    minHeight: 46,
+    minHeight: 32,
   },
   thumb: {
     position: 'absolute',
     top: TRACK_PADDING,
     bottom: TRACK_PADDING,
     left: TRACK_PADDING,
-    borderRadius: RADII.md + 1,
+    borderRadius: RADII.sm,
     borderWidth: LAYOUT.borderWidth,
   },
   segment: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: RADII.md + 1,
+    borderRadius: RADII.sm,
     overflow: 'hidden',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   labelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
   },
   dot: {
-    width: 6,
-    height: 6,
+    width: 5,
+    height: 5,
     borderRadius: RADII.pill,
   },
 });
