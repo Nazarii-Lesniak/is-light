@@ -14,6 +14,7 @@ import {
   TYPOGRAPHY,
   getElevation,
 } from '@/shared/theme/tokens';
+import { GlassBackdrop } from '@/shared/ui/GlassBackdrop';
 import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { type SegmentOption, SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { formatKyivDate, formatUkrainianDateLabel } from '@is-light/shared';
@@ -166,6 +167,7 @@ export function HomeDashboard() {
   if (!primaryLocation) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
+        <GlassBackdrop />
         <View style={styles.emptyTopBar}>
           <InteractiveSurface
             onPress={() => setThemePickerVisible(true)}
@@ -264,6 +266,7 @@ export function HomeDashboard() {
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
+      <GlassBackdrop />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}

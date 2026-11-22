@@ -1,10 +1,10 @@
 import { useAppStore, useAppTheme } from '@/entities/location/model/store';
 import { THEME_LIST } from '@/shared/theme/themes';
-import { LAYOUT, RADII, SPACING, TYPOGRAPHY } from '@/shared/theme/tokens';
+import { CONTINUOUS_CORNER, LAYOUT, RADII, SPACING, TYPOGRAPHY } from '@/shared/theme/tokens';
 import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
 import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
-import { Check, Palette } from 'lucide-react-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { Check, Palette, Sparkles } from 'lucide-react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 interface ThemePickerModalProps {
   visible: boolean;
@@ -23,8 +23,13 @@ export function ThemePickerModal({ visible, onClose }: ThemePickerModalProps) {
       title="Тема оформлення"
       subtitle="Оберіть комфортну палітру для екрану"
       icon={<Palette size={20} color={theme.accent} strokeWidth={2.2} />}
+      maxHeightRatio={0.84}
     >
-      <View style={styles.list}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.list}
+        showsVerticalScrollIndicator={false}
+      >
         {THEME_LIST.map((item) => {
           const isSelected = item.id === currentThemeId;
 
@@ -57,7 +62,7 @@ export function ThemePickerModal({ visible, onClose }: ThemePickerModalProps) {
                       idx > 0 ? styles.swatchOverlap : undefined,
                       {
                         backgroundColor: swatchColor,
-                        borderColor: theme.surface,
+                        borderColor: theme.isGlass ? theme.border : theme.surface,
                       },
                     ]}
                   />
@@ -65,7 +70,21 @@ export function ThemePickerModal({ visible, onClose }: ThemePickerModalProps) {
               </View>
 
               <View style={styles.textWrap}>
-                <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>{item.name}</Text>
+                <View style={styles.nameRow}>
+                  <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>{item.name}</Text>
+                  {item.isGlass ? (
+                    <View
+                      style={[
+                        styles.glassTag,
+                        CONTINUOUS_CORNER,
+                        { backgroundColor: theme.accentSoft },
+                      ]}
+                    >
+                      <Sparkles size={10} color={theme.accent} />
+                      <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>Скло</Text>
+                    </View>
+                  ) : null}
+                </View>
                 <Text style={[TYPOGRAPHY.footnote, { color: theme.textMuted }]}>
                   {item.subtitle}
                 </Text>
@@ -79,14 +98,18 @@ export function ThemePickerModal({ visible, onClose }: ThemePickerModalProps) {
             </InteractiveSurface>
           );
         })}
-      </View>
+      </ScrollView>
     </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    maxHeight: 430,
+  },
   list: {
     gap: SPACING.xs + 2,
+    paddingBottom: SPACING.xs,
   },
   themeRow: {
     flexDirection: 'row',
@@ -112,6 +135,19 @@ const styles = StyleSheet.create({
   textWrap: {
     flex: 1,
     gap: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  glassTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: RADII.pill,
   },
   checkCircle: {
     width: 26,

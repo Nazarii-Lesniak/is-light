@@ -9,6 +9,7 @@ import {
   TYPOGRAPHY,
 } from '@/shared/theme/tokens';
 import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
+import { BlurView } from 'expo-blur';
 import { X } from 'lucide-react-native';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
@@ -119,8 +120,8 @@ export function AppBottomSheet({
           styles.sheet,
           CONTINUOUS_CORNER,
           {
-            backgroundColor: theme.surface,
-            borderTopColor: theme.border,
+            backgroundColor: theme.isGlass ? 'transparent' : theme.surface,
+            borderTopColor: theme.isGlass ? theme.glassBorder : theme.border,
             maxHeight: `${Math.round(maxHeightRatio * 100)}%`,
             paddingBottom: Math.max(insets.bottom, SPACING.md) + SPACING.xs,
             transform: [{ translateY: sheetTranslateY }],
@@ -128,6 +129,20 @@ export function AppBottomSheet({
           },
         ]}
       >
+        {theme.isGlass ? (
+          <>
+            <BlurView
+              intensity={Platform.OS === 'ios' ? 85 : 65}
+              tint={theme.glassTint}
+              experimentalBlurMethod="dimezisBlurView"
+              style={StyleSheet.absoluteFill}
+            />
+            <View
+              pointerEvents="none"
+              style={[StyleSheet.absoluteFill, { backgroundColor: theme.glassOverlay }]}
+            />
+          </>
+        ) : null}
         <View style={[styles.grabber, { backgroundColor: theme.border }]} />
 
         <View style={styles.header}>
@@ -200,6 +215,7 @@ const styles = StyleSheet.create({
     borderTopWidth: LAYOUT.borderWidth,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
+    overflow: 'hidden',
   },
   grabber: {
     width: 36,

@@ -34,7 +34,18 @@ export const HOUR_CELL_STATES = [
 ] as const;
 export type HourCellState = (typeof HOUR_CELL_STATES)[number];
 
-export const THEME_IDS = ['light', 'midnight', 'graphite', 'ocean', 'cream'] as const;
+export const THEME_IDS = [
+  'light',
+  'midnight',
+  'graphite',
+  'ocean',
+  'cream',
+  'liquidGlass',
+  'obsidianGlass',
+  'emerald',
+  'lavender',
+  'sunset',
+] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 export const themeIdSchema = z.enum(THEME_IDS);
 
