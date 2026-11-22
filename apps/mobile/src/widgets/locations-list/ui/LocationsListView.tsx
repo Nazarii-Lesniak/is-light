@@ -13,7 +13,16 @@ import {
 import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
 import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { useRouter } from 'expo-router';
-import { ArrowRight, Check, MapPin, Pencil, Plus, Star, Trash2 } from 'lucide-react-native';
+import {
+  ArrowRight,
+  Check,
+  ChevronRight,
+  MapPin,
+  Pencil,
+  Plus,
+  Star,
+  Trash2,
+} from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -49,6 +58,13 @@ export function LocationsListView() {
   const [editingLocation, setEditingLocation] = useState<SavedLocation | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
   const [isLabelFocused, setIsLabelFocused] = useState(false);
+
+  const handleOpenLocation = (location: SavedLocation) => {
+    if (location.id !== primaryLocationId) {
+      setPrimaryLocation(location.id);
+    }
+    router.push('/(tabs)');
+  };
 
   const handleOpenEdit = (location: SavedLocation) => {
     setEditingLocation(location);
@@ -177,50 +193,61 @@ export function LocationsListView() {
                   },
                 ]}
               >
-                <View style={styles.cardTop}>
-                  <View style={styles.badgesRow}>
-                    <View
-                      style={[
-                        styles.groupPill,
-                        CONTINUOUS_CORNER,
-                        { backgroundColor: theme.accentSoft },
-                      ]}
-                    >
-                      <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>
-                        Група {location.groupId}
-                      </Text>
-                    </View>
-
-                    {isPrimary ? (
+                <InteractiveSurface
+                  onPress={() => handleOpenLocation(location)}
+                  scaleVariant="card"
+                  hitSlop={0}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Відкрити графік для ${location.label || location.fullAddress}`}
+                  contentStyle={styles.cardTopPressable}
+                >
+                  <View style={styles.cardTopBody}>
+                    <View style={styles.badgesRow}>
                       <View
                         style={[
-                          styles.primaryPill,
+                          styles.groupPill,
                           CONTINUOUS_CORNER,
-                          { backgroundColor: theme.onHalfBg },
+                          { backgroundColor: theme.accentSoft },
                         ]}
                       >
-                        <Star size={11} color={theme.onIcon} fill={theme.onIcon} />
-                        <Text style={[TYPOGRAPHY.caption, { color: theme.onText }]}>Основна</Text>
+                        <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>
+                          Група {location.groupId}
+                        </Text>
                       </View>
+
+                      {isPrimary ? (
+                        <View
+                          style={[
+                            styles.primaryPill,
+                            CONTINUOUS_CORNER,
+                            { backgroundColor: theme.onHalfBg },
+                          ]}
+                        >
+                          <Star size={11} color={theme.onIcon} fill={theme.onIcon} />
+                          <Text style={[TYPOGRAPHY.caption, { color: theme.onText }]}>Основна</Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    {location.label ? (
+                      <Text style={[TYPOGRAPHY.title3, styles.cardLabel, { color: theme.text }]}>
+                        {location.label}
+                      </Text>
                     ) : null}
+
+                    <Text
+                      style={[
+                        location.label ? TYPOGRAPHY.callout : TYPOGRAPHY.headline,
+                        styles.cardAddress,
+                        { color: location.label ? theme.textSecondary : theme.text },
+                      ]}
+                    >
+                      {location.fullAddress}
+                    </Text>
                   </View>
 
-                  {location.label ? (
-                    <Text style={[TYPOGRAPHY.title3, styles.cardLabel, { color: theme.text }]}>
-                      {location.label}
-                    </Text>
-                  ) : null}
-
-                  <Text
-                    style={[
-                      location.label ? TYPOGRAPHY.callout : TYPOGRAPHY.headline,
-                      styles.cardAddress,
-                      { color: location.label ? theme.textSecondary : theme.text },
-                    ]}
-                  >
-                    {location.fullAddress}
-                  </Text>
-                </View>
+                  <ChevronRight size={19} color={theme.textMuted} strokeWidth={2} />
+                </InteractiveSurface>
 
                 <View style={[styles.cardActions, { borderTopColor: interactive.divider }]}>
                   {!isPrimary ? (
@@ -247,7 +274,7 @@ export function LocationsListView() {
                     </InteractiveSurface>
                   ) : (
                     <InteractiveSurface
-                      onPress={() => router.push('/(tabs)')}
+                      onPress={() => handleOpenLocation(location)}
                       accessibilityRole="button"
                       borderRadius={RADII.md}
                       style={styles.mainActionOuter}
@@ -476,9 +503,18 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: RADII.xl,
-    padding: LAYOUT.cardPadding,
+    overflow: 'hidden',
   },
-  cardTop: {
+  cardTopPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    padding: LAYOUT.cardPadding,
+    paddingBottom: SPACING.sm + 2,
+  },
+  cardTopBody: {
+    flex: 1,
     gap: 6,
   },
   badgesRow: {
@@ -507,8 +543,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   cardActions: {
-    marginTop: SPACING.sm + 2,
+    marginHorizontal: LAYOUT.cardPadding,
     paddingTop: SPACING.sm,
+    paddingBottom: LAYOUT.cardPadding,
     borderTopWidth: LAYOUT.borderWidth,
     flexDirection: 'row',
     alignItems: 'center',
