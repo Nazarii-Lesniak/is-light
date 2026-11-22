@@ -1,7 +1,9 @@
 import { useAppTheme } from '@/entities/location/model/store';
 import {
   CONTINUOUS_CORNER,
+  HIT_SLOP_STANDARD,
   LAYOUT,
+  MOTION,
   RADII,
   SPACING,
   TABULAR_NUMS,
@@ -9,13 +11,14 @@ import {
   getElevation,
   getInteractiveTokens,
 } from '@/shared/theme/tokens';
+import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import {
   type DaySchedule,
   formatCountdownUk,
   formatKyivTime,
   getCurrentPowerStatus,
 } from '@is-light/shared';
-import { Clock, HelpCircle, WifiOff, Zap, ZapOff } from 'lucide-react-native';
+import { ChevronUp, Clock, HelpCircle, WifiOff, Zap, ZapOff } from 'lucide-react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
@@ -36,9 +39,12 @@ export function CurrentStatusCard({
   const elevation = getElevation(theme);
   const interactive = getInteractiveTokens(theme);
   const [now, setNow] = useState(() => new Date());
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const skeletonAnim = useRef(new Animated.Value(0.45)).current;
+  const chevronAnim = useRef(new Animated.Value(0)).current;
+  const detailsAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -103,6 +109,24 @@ export function CurrentStatusCard({
     return () => loop.stop();
   }, [isLiveKnown, showSkeleton, pulseAnim]);
 
+  useEffect(() => {
+    Animated.spring(chevronAnim, {
+      toValue: isExpanded ? 1 : 0,
+      ...MOTION.springSnappy,
+    }).start();
+
+    if (isExpanded) {
+      detailsAnim.setValue(0);
+      Animated.timing(detailsAnim, {
+        toValue: 1,
+        duration: MOTION.durationNormal,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      detailsAnim.setValue(0);
+    }
+  }, [isExpanded, chevronAnim, detailsAnim]);
+
   if (showSkeleton) {
     return (
       <View
@@ -130,25 +154,6 @@ export function CurrentStatusCard({
               { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
             ]}
           />
-        </View>
-
-        <Animated.View
-          style={[
-            styles.skeletonSubline,
-            { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.skeletonHero,
-            { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
-          ]}
-        />
-
-        <View style={[styles.footer, { borderTopColor: interactive.divider }]}>
-          <Text style={[TYPOGRAPHY.footnote, { color: theme.textMuted }]}>
-            Оновлюємо актуальний графік…
-          </Text>
         </View>
       </View>
     );
@@ -214,6 +219,11 @@ export function CurrentStatusCard({
   );
   const hasFooterContent = isOffline || Boolean(today?.sourceInfo);
 
+  const chevronRotate = chevronAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg'],
+  });
+
   return (
     <View
       accessibilityRole="summary"
@@ -251,81 +261,128 @@ export function CurrentStatusCard({
           </Text>
         </View>
 
-        <View
-          style={[
-            styles.iconEmblem,
-            CONTINUOUS_CORNER,
-            {
-              backgroundColor: iconBgColor,
-            },
-          ]}
-        >
-          {isOff ? (
-            <ZapOff size={21} color={iconColor} strokeWidth={2.2} />
-          ) : isUnknownWithSchedule ? (
-            <HelpCircle size={21} color={iconColor} strokeWidth={2.2} />
-          ) : (
-            <Zap size={21} color={iconColor} strokeWidth={2.2} />
-          )}
+        <View style={styles.rightControls}>
+          <InteractiveSurface
+            onPress={() => setIsExpanded((prev) => !prev)}
+            hitSlop={HIT_SLOP_STANDARD}
+            borderRadius={RADII.pill}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isExpanded }}
+            accessibilityLabel={isExpanded ? 'Сховати деталі статусу' : 'Показати деталі статусу'}
+            contentStyle={[
+              styles.expandButton,
+              {
+                backgroundColor: iconBgColor,
+              },
+            ]}
+          >
+            <Animated.View style={{ transform: [{ rotate: chevronRotate }] }}>
+              <ChevronUp size={17} color={iconColor} strokeWidth={2.4} />
+            </Animated.View>
+          </InteractiveSurface>
+
+          <View
+            style={[
+              styles.iconEmblem,
+              CONTINUOUS_CORNER,
+              {
+                backgroundColor: iconBgColor,
+              },
+            ]}
+          >
+            {isOff ? (
+              <ZapOff size={21} color={iconColor} strokeWidth={2.2} />
+            ) : isUnknownWithSchedule ? (
+              <HelpCircle size={21} color={iconColor} strokeWidth={2.2} />
+            ) : (
+              <Zap size={21} color={iconColor} strokeWidth={2.2} />
+            )}
+          </View>
         </View>
       </View>
 
-      {hasBodyContent ? (
-        <View style={styles.body}>
-          {hasCountdown && nextActionKicker && countdownHeroValue ? (
-            <>
-              <View style={styles.kickerRow}>
-                <Clock size={14} color={iconColor} strokeWidth={2} />
-                <Text
-                  style={[TYPOGRAPHY.callout, TABULAR_NUMS, { color: textColor, opacity: 0.88 }]}
-                >
-                  {nextActionKicker}
-                </Text>
-              </View>
-              <Text style={[TYPOGRAPHY.metricHero, styles.heroText, { color: textColor }]}>
-                {countdownHeroValue}
-              </Text>
-            </>
-          ) : fallbackDescription ? (
-            <Text style={[TYPOGRAPHY.callout, styles.fallbackDesc, { color: textColor }]}>
-              {fallbackDescription}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {hasFooterContent ? (
-        <View
-          style={[
-            styles.footer,
-            {
-              borderTopColor: borderColor,
-            },
-          ]}
+      {isExpanded ? (
+        <Animated.View
+          style={{
+            opacity: detailsAnim,
+            transform: [
+              {
+                translateY: detailsAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-4, 0],
+                }),
+              },
+            ],
+          }}
         >
-          {isOffline ? (
+          {hasBodyContent ? (
+            <View style={styles.body}>
+              {hasCountdown && nextActionKicker && countdownHeroValue ? (
+                <>
+                  <View style={styles.kickerRow}>
+                    <Clock size={14} color={iconColor} strokeWidth={2} />
+                    <Text
+                      style={[
+                        TYPOGRAPHY.callout,
+                        TABULAR_NUMS,
+                        { color: textColor, opacity: 0.88 },
+                      ]}
+                    >
+                      {nextActionKicker}
+                    </Text>
+                  </View>
+                  <Text style={[TYPOGRAPHY.metricHero, styles.heroText, { color: textColor }]}>
+                    {countdownHeroValue}
+                  </Text>
+                </>
+              ) : fallbackDescription ? (
+                <Text style={[TYPOGRAPHY.callout, styles.fallbackDesc, { color: textColor }]}>
+                  {fallbackDescription}
+                </Text>
+              ) : null}
+            </View>
+          ) : !hasFooterContent ? (
+            <View style={styles.body}>
+              <Text style={[TYPOGRAPHY.callout, styles.fallbackDesc, { color: textColor }]}>
+                Змін найближчим часом не заплановано
+              </Text>
+            </View>
+          ) : null}
+
+          {hasFooterContent ? (
             <View
               style={[
-                styles.offlinePill,
-                CONTINUOUS_CORNER,
+                styles.footer,
                 {
-                  backgroundColor: theme.warningBg,
-                  borderColor: theme.warningBorder,
+                  borderTopColor: borderColor,
                 },
               ]}
             >
-              <WifiOff size={11} color={theme.warningText} />
-              <Text style={[TYPOGRAPHY.caption, { color: theme.warningText }]}>Офлайн-кеш</Text>
+              {isOffline ? (
+                <View
+                  style={[
+                    styles.offlinePill,
+                    CONTINUOUS_CORNER,
+                    {
+                      backgroundColor: theme.warningBg,
+                      borderColor: theme.warningBorder,
+                    },
+                  ]}
+                >
+                  <WifiOff size={11} color={theme.warningText} />
+                  <Text style={[TYPOGRAPHY.caption, { color: theme.warningText }]}>Офлайн-кеш</Text>
+                </View>
+              ) : today?.sourceInfo ? (
+                <Text
+                  style={[TYPOGRAPHY.footnote, styles.sourceInfo, { color: theme.textMuted }]}
+                  numberOfLines={2}
+                >
+                  {today.sourceInfo}
+                </Text>
+              ) : null}
             </View>
-          ) : today?.sourceInfo ? (
-            <Text
-              style={[TYPOGRAPHY.footnote, styles.sourceInfo, { color: theme.textMuted }]}
-              numberOfLines={1}
-            >
-              {today.sourceInfo}
-            </Text>
           ) : null}
-        </View>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -358,6 +415,18 @@ const styles = StyleSheet.create({
   },
   statusPillText: {
     fontWeight: '600',
+  },
+  rightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  expandButton: {
+    width: 34,
+    height: 34,
+    borderRadius: RADII.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconEmblem: {
     width: 42,
@@ -404,17 +473,5 @@ const styles = StyleSheet.create({
     width: 152,
     height: 30,
     borderRadius: RADII.pill,
-  },
-  skeletonSubline: {
-    marginTop: SPACING.md,
-    width: 180,
-    height: 16,
-    borderRadius: RADII.xs,
-  },
-  skeletonHero: {
-    marginTop: SPACING.xs,
-    width: 220,
-    height: 30,
-    borderRadius: RADII.sm,
   },
 });
