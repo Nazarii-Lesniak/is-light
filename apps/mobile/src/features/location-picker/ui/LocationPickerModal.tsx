@@ -1,17 +1,18 @@
 import { useAppStore, useAppTheme } from '@/entities/location/model/store';
 import type { SavedLocation } from '@/entities/location/model/types';
+import {
+  CONTINUOUS_CORNER,
+  HIT_SLOP_STANDARD,
+  LAYOUT,
+  RADII,
+  SPACING,
+  TYPOGRAPHY,
+} from '@/shared/theme/tokens';
+import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
+import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { Check, MapPin, Search, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 interface LocationPickerModalProps {
   visible: boolean;
@@ -21,6 +22,7 @@ interface LocationPickerModalProps {
 export function LocationPickerModal({ visible, onClose }: LocationPickerModalProps) {
   const theme = useAppTheme();
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const locations = useAppStore((s) => s.locations);
   const primaryLocationId = useAppStore((s) => s.primaryLocationId);
   const setPrimaryLocation = useAppStore((s) => s.setPrimaryLocation);
@@ -39,6 +41,7 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
 
   const handleClose = () => {
     setSearchQuery('');
+    setIsSearchFocused(false);
     onClose();
   };
 
@@ -48,146 +51,184 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <AppBottomSheet
+      visible={visible}
+      onClose={handleClose}
+      title="Основна локація"
+      subtitle="Оберіть адресу для головного екрану та сповіщень"
+      avoidKeyboard
+      maxHeightRatio={0.82}
+    >
+      <View
+        style={[
+          styles.searchBox,
+          CONTINUOUS_CORNER,
+          {
+            backgroundColor: theme.surfaceInput,
+            borderColor: isSearchFocused ? theme.accent : theme.border,
+            borderWidth: isSearchFocused ? 1.5 : LAYOUT.borderWidth,
+          },
+        ]}
       >
-        <Pressable className="flex-1 justify-end bg-black/50" onPress={handleClose}>
+        <Search size={18} color={isSearchFocused ? theme.accent : theme.textMuted} />
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onFocus={() => setIsSearchFocused(true)}
+          onBlur={() => setIsSearchFocused(false)}
+          placeholder="Пошук серед збережених адрес…"
+          placeholderTextColor={theme.textMuted}
+          style={[TYPOGRAPHY.body, styles.searchInput, { color: theme.text }]}
+        />
+        {searchQuery.length > 0 ? (
           <Pressable
-            className="max-h-[80%] rounded-t-3xl px-5 pb-8 pt-4"
-            style={{
-              backgroundColor: theme.surface,
-              borderTopWidth: 1,
-              borderTopColor: theme.border,
-            }}
-            onPress={(e) => e.stopPropagation()}
+            onPress={() => setSearchQuery('')}
+            hitSlop={HIT_SLOP_STANDARD}
+            accessibilityLabel="Очистити пошук"
           >
-            <View
-              className="mb-3 h-1.5 w-12 self-center rounded-full"
-              style={{ backgroundColor: theme.border }}
-            />
+            <X size={16} color={theme.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
 
-            <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-bold" style={{ color: theme.text }}>
-                Основна локація
-              </Text>
-              <Pressable
-                onPress={handleClose}
-                className="h-9 w-9 items-center justify-center rounded-full"
-                style={{ backgroundColor: theme.surfaceMuted }}
-                accessibilityLabel="Закрити"
-              >
-                <X size={18} color={theme.textSecondary} />
-              </Pressable>
-            </View>
-
-            <Text className="mt-1 text-sm" style={{ color: theme.textMuted }}>
-              Оберіть адресу для головного екрану та сповіщень
+      <ScrollView
+        style={styles.list}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {filteredLocations.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={[TYPOGRAPHY.callout, { color: theme.textMuted }]}>
+              {locations.length === 0
+                ? 'Збережених адрес поки немає'
+                : 'За вашим запитом адрес не знайдено'}
             </Text>
+          </View>
+        ) : (
+          filteredLocations.map((location) => {
+            const isActive = location.id === primaryLocationId;
+            return (
+              <InteractiveSurface
+                key={location.id}
+                onPress={() => handleSelect(location)}
+                scaleVariant="card"
+                borderRadius={RADII.lg}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+                contentStyle={[
+                  styles.locationRow,
+                  {
+                    backgroundColor: isActive ? theme.accentSoft : theme.surfaceInput,
+                    borderColor: isActive ? theme.accent : theme.border,
+                    borderWidth: isActive ? 1.5 : LAYOUT.borderWidth,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.pinBadge,
+                    CONTINUOUS_CORNER,
+                    {
+                      backgroundColor: isActive ? theme.accent : theme.surfaceMuted,
+                    },
+                  ]}
+                >
+                  <MapPin
+                    size={18}
+                    color={isActive ? theme.accentOnSolid : theme.textSecondary}
+                    strokeWidth={2.1}
+                  />
+                </View>
 
-            <View
-              className="mt-3.5 flex-row items-center rounded-xl border px-3"
-              style={{
-                backgroundColor: theme.surfaceInput,
-                borderColor: theme.border,
-              }}
-            >
-              <Search size={18} color={theme.textMuted} />
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Пошук серед збережених адрес..."
-                placeholderTextColor={theme.textMuted}
-                className="ml-2 flex-1 py-3 text-base"
-                style={{ color: theme.text }}
-              />
-              {searchQuery.length > 0 ? (
-                <Pressable onPress={() => setSearchQuery('')}>
-                  <X size={16} color={theme.textMuted} />
-                </Pressable>
-              ) : null}
-            </View>
-
-            <ScrollView
-              className="mt-3 max-h-[360px]"
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-            >
-              {filteredLocations.length === 0 ? (
-                <View className="items-center py-8">
-                  <Text className="text-sm" style={{ color: theme.textMuted }}>
-                    {locations.length === 0
-                      ? 'Збережених адрес поки немає'
-                      : 'За вашим запитом адрес не знайдено'}
+                <View style={styles.rowTextWrap}>
+                  {location.label ? (
+                    <Text style={[TYPOGRAPHY.headline, { color: theme.text }]} numberOfLines={1}>
+                      {location.label}
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={[
+                      location.label ? TYPOGRAPHY.footnote : TYPOGRAPHY.callout,
+                      {
+                        color: location.label ? theme.textSecondary : theme.text,
+                        fontWeight: location.label ? '400' : '600',
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {location.fullAddress}
+                  </Text>
+                  <Text style={[TYPOGRAPHY.caption, styles.groupText, { color: theme.accentText }]}>
+                    Група {location.groupId}
                   </Text>
                 </View>
-              ) : (
-                <View className="gap-2 pb-2">
-                  {filteredLocations.map((location) => {
-                    const isActive = location.id === primaryLocationId;
-                    return (
-                      <Pressable
-                        key={location.id}
-                        onPress={() => handleSelect(location)}
-                        className="flex-row items-center rounded-2xl border p-3.5"
-                        style={{
-                          backgroundColor: isActive ? theme.accentSoft : theme.surfaceInput,
-                          borderColor: isActive ? theme.accent : theme.border,
-                        }}
-                      >
-                        <View
-                          className="h-10 w-10 items-center justify-center rounded-xl"
-                          style={{
-                            backgroundColor: isActive ? theme.accent : theme.surfaceMuted,
-                          }}
-                        >
-                          <MapPin
-                            size={18}
-                            color={isActive ? theme.accentOnSolid : theme.textSecondary}
-                          />
-                        </View>
 
-                        <View className="ml-3 flex-1">
-                          {location.label ? (
-                            <Text className="text-sm font-bold" style={{ color: theme.text }}>
-                              {location.label}
-                            </Text>
-                          ) : null}
-                          <Text
-                            className={location.label ? 'text-xs' : 'text-sm font-semibold'}
-                            style={{
-                              color: location.label ? theme.textSecondary : theme.text,
-                            }}
-                            numberOfLines={1}
-                          >
-                            {location.fullAddress}
-                          </Text>
-                          <Text
-                            className="mt-0.5 text-xs font-medium"
-                            style={{ color: theme.accentText }}
-                          >
-                            Група {location.groupId}
-                          </Text>
-                        </View>
-
-                        {isActive ? (
-                          <View
-                            className="h-7 w-7 items-center justify-center rounded-full"
-                            style={{ backgroundColor: theme.accent }}
-                          >
-                            <Check size={15} color={theme.accentOnSolid} />
-                          </View>
-                        ) : null}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
+                {isActive ? (
+                  <View style={[styles.checkCircle, { backgroundColor: theme.accent }]}>
+                    <Check size={14} color={theme.accentOnSolid} strokeWidth={2.6} />
+                  </View>
+                ) : null}
+              </InteractiveSurface>
+            );
+          })
+        )}
+      </ScrollView>
+    </AppBottomSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  searchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADII.md + 2,
+    paddingHorizontal: SPACING.sm,
+    minHeight: 46,
+    gap: SPACING.xs,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 10,
+  },
+  list: {
+    marginTop: SPACING.sm,
+    maxHeight: 360,
+  },
+  listContent: {
+    gap: SPACING.xs + 2,
+    paddingBottom: SPACING.xs,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xxl,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADII.lg,
+    padding: SPACING.sm + 2,
+    gap: SPACING.sm,
+  },
+  pinBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: RADII.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  groupText: {
+    marginTop: 2,
+  },
+  checkCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: RADII.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
