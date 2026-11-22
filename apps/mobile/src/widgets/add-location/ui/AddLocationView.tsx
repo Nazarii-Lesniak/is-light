@@ -2,6 +2,19 @@ import { useAppStore, useAppTheme } from '@/entities/location/model/store';
 import type { SavedLocation } from '@/entities/location/model/types';
 import { searchOblastCities } from '@/features/address-search/api/addressApi';
 import { useAddressSearch } from '@/features/address-search/model/useAddressSearch';
+import {
+  CONTINUOUS_CORNER,
+  HIT_SLOP_STANDARD,
+  LAYOUT,
+  MOTION,
+  RADII,
+  SPACING,
+  TYPOGRAPHY,
+  getElevation,
+  getInteractiveTokens,
+} from '@/shared/theme/tokens';
+import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
+import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { type AddressSearchItem, type CityItem, LVIV_CITY_ID } from '@is-light/shared';
 import { useRouter } from 'expo-router';
 import { Building2, Check, ChevronDown, MapPin, Search, Tag, X } from 'lucide-react-native';
@@ -9,11 +22,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   View,
@@ -31,6 +45,8 @@ const DEFAULT_CITY: CityItem = {
 export function AddLocationView() {
   const router = useRouter();
   const theme = useAppTheme();
+  const elevation = getElevation(theme);
+  const interactive = getInteractiveTokens(theme);
   const locations = useAppStore((s) => s.locations);
   const primaryLocationId = useAppStore((s) => s.primaryLocationId);
   const addLocation = useAppStore((s) => s.addLocation);
@@ -42,13 +58,33 @@ export function AddLocationView() {
   const [cityResults, setCityResults] = useState<CityItem[]>([]);
   const [isCitiesLoading, setIsCitiesLoading] = useState(false);
   const [cityError, setCityError] = useState<string | null>(null);
+  const [isCitySearchFocused, setIsCitySearchFocused] = useState(false);
   const cityAbortRef = useRef<AbortController | null>(null);
 
   const [query, setQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<AddressSearchItem | null>(null);
   const [label, setLabel] = useState('');
+  const [isLabelFocused, setIsLabelFocused] = useState(false);
+
+  const stepAnim = useRef(new Animated.Value(1)).current;
+  const prevHasSelectedRef = useRef(false);
 
   const { items, isLoading, error, hasSearched } = useAddressSearch(query, selectedCity.id);
+  const hasSelectedAddress = selectedAddress !== null;
+
+  useEffect(() => {
+    if (prevHasSelectedRef.current === hasSelectedAddress) {
+      return;
+    }
+    prevHasSelectedRef.current = hasSelectedAddress;
+    stepAnim.setValue(0);
+    Animated.timing(stepAnim, {
+      toValue: 1,
+      duration: MOTION.durationNormal,
+      useNativeDriver: true,
+    }).start();
+  }, [hasSelectedAddress, stepAnim]);
 
   const fetchCities = useCallback((search: string) => {
     cityAbortRef.current?.abort();
@@ -99,6 +135,7 @@ export function AddLocationView() {
     setQuery('');
     setSelectedAddress(null);
     setCityQuery('');
+    setIsCitySearchFocused(false);
     setCityModalVisible(false);
   };
 
@@ -188,458 +225,890 @@ export function AddLocationView() {
       : ['шевченка 1', 'франка 10', 'галицька 5'];
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.bg }} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
       <KeyboardAvoidingView
-        className="flex-1"
+        style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <View className="px-4 pb-2 pt-3">
-          <Text className="text-2xl font-bold" style={{ color: theme.text }}>
-            Додати адресу
-          </Text>
-          <Text className="mt-0.5 text-sm" style={{ color: theme.textMuted }}>
+        <View style={styles.header}>
+          <Text style={[TYPOGRAPHY.largeTitle, { color: theme.text }]}>Додати адресу</Text>
+          <Text style={[TYPOGRAPHY.subhead, styles.headerSubtitle, { color: theme.textMuted }]}>
             Пошук по м. Львів та всій Львівській області
           </Text>
         </View>
 
-        {selectedAddress ? (
-          <ScrollView
-            className="flex-1 px-4 pt-2"
-            contentContainerStyle={{ paddingBottom: 112 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View
-              className="rounded-2xl border p-4"
-              style={{ backgroundColor: theme.surface, borderColor: theme.accent }}
+        <Animated.View
+          style={[
+            styles.flex,
+            {
+              opacity: stepAnim,
+              transform: [
+                {
+                  translateY: stepAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [8, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          {selectedAddress ? (
+            <ScrollView
+              style={styles.confirmScroll}
+              contentContainerStyle={styles.confirmContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <View className="flex-row items-start justify-between gap-2">
-                <View className="flex-1">
-                  <Text
-                    className="text-xs font-semibold uppercase tracking-wide"
-                    style={{ color: theme.accentText }}
+              <View
+                style={[
+                  styles.confirmCard,
+                  CONTINUOUS_CORNER,
+                  elevation.card,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.accent,
+                  },
+                ]}
+              >
+                <View style={styles.confirmHeader}>
+                  <View style={styles.confirmTitleWrap}>
+                    <Text
+                      style={[
+                        TYPOGRAPHY.caption,
+                        styles.confirmKicker,
+                        { color: theme.accentText },
+                      ]}
+                    >
+                      ОБРАНА АДРЕСА · {selectedAddress.cityName.toUpperCase()}
+                    </Text>
+                    <Text style={[TYPOGRAPHY.title3, styles.confirmAddress, { color: theme.text }]}>
+                      {selectedAddress.fullAddress}
+                    </Text>
+                    <View
+                      style={[
+                        styles.groupPill,
+                        CONTINUOUS_CORNER,
+                        { backgroundColor: theme.accentSoft },
+                      ]}
+                    >
+                      <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>
+                        Група {selectedAddress.groupId}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <InteractiveSurface
+                    onPress={() => setSelectedAddress(null)}
+                    hitSlop={HIT_SLOP_STANDARD}
+                    accessibilityRole="button"
+                    accessibilityLabel="Змінити адресу"
+                    borderRadius={RADII.pill}
+                    contentStyle={[styles.closeCircle, { backgroundColor: theme.surfaceMuted }]}
                   >
-                    Обрана адреса • {selectedAddress.cityName}
+                    <X size={16} color={theme.textSecondary} strokeWidth={2.2} />
+                  </InteractiveSurface>
+                </View>
+
+                <View style={[styles.labelSection, { borderTopColor: interactive.divider }]}>
+                  <View style={styles.labelHeaderRow}>
+                    <Tag size={15} color={theme.textSecondary} />
+                    <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>
+                      Мітка локації (необовʼязково)
+                    </Text>
+                  </View>
+                  <Text style={[TYPOGRAPHY.footnote, styles.labelHint, { color: theme.textMuted }]}>
+                    Допоможе швидше орієнтуватися серед кількох адрес
                   </Text>
-                  <Text className="mt-1 text-lg font-bold" style={{ color: theme.text }}>
-                    {selectedAddress.fullAddress}
-                  </Text>
+
+                  <TextInput
+                    value={label}
+                    onChangeText={setLabel}
+                    onFocus={() => setIsLabelFocused(true)}
+                    onBlur={() => setIsLabelFocused(false)}
+                    placeholder="Наприклад: Дім, Робота, Батьки"
+                    placeholderTextColor={theme.textMuted}
+                    maxLength={32}
+                    style={[
+                      TYPOGRAPHY.body,
+                      CONTINUOUS_CORNER,
+                      styles.labelInput,
+                      {
+                        backgroundColor: theme.surfaceInput,
+                        borderColor: isLabelFocused ? theme.accent : theme.border,
+                        borderWidth: isLabelFocused ? 1.5 : LAYOUT.borderWidth,
+                        color: theme.text,
+                      },
+                    ]}
+                  />
+
+                  <View style={styles.chipsRow}>
+                    {LABEL_SUGGESTIONS.map((preset) => {
+                      const active = label === preset;
+                      return (
+                        <InteractiveSurface
+                          key={preset}
+                          onPress={() => setLabel(preset)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: active }}
+                          borderRadius={RADII.pill}
+                          contentStyle={[
+                            styles.chip,
+                            {
+                              backgroundColor: active ? theme.accentSoft : theme.surfaceInput,
+                              borderColor: active ? theme.accent : theme.border,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              TYPOGRAPHY.subhead,
+                              {
+                                color: active ? theme.accentText : theme.textSecondary,
+                                fontWeight: active ? '600' : '500',
+                              },
+                            ]}
+                          >
+                            {preset}
+                          </Text>
+                        </InteractiveSurface>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.confirmActions}>
+                  <InteractiveSurface
+                    onPress={() => setSelectedAddress(null)}
+                    accessibilityRole="button"
+                    borderRadius={RADII.lg}
+                    style={styles.actionFlex}
+                    contentStyle={[
+                      styles.secondaryBtn,
+                      {
+                        borderColor: theme.border,
+                        backgroundColor: theme.surfaceInput,
+                      },
+                    ]}
+                  >
+                    <Text style={[TYPOGRAPHY.headline, { color: theme.textSecondary }]}>Назад</Text>
+                  </InteractiveSurface>
+
+                  <InteractiveSurface
+                    onPress={handleSavePress}
+                    accessibilityRole="button"
+                    rippleTone="accent"
+                    borderRadius={RADII.lg}
+                    style={styles.actionFlex}
+                    contentStyle={[styles.primaryBtn, { backgroundColor: theme.accent }]}
+                  >
+                    <Check size={17} color={theme.accentOnSolid} strokeWidth={2.5} />
+                    <Text style={[TYPOGRAPHY.headline, { color: theme.accentOnSolid }]}>
+                      Зберегти
+                    </Text>
+                  </InteractiveSurface>
+                </View>
+              </View>
+            </ScrollView>
+          ) : (
+            <View style={styles.searchContainer}>
+              <InteractiveSurface
+                onPress={() => setCityModalVisible(true)}
+                scaleVariant="card"
+                borderRadius={RADII.lg}
+                accessibilityRole="button"
+                accessibilityLabel={`Населений пункт: ${selectedCity.name}`}
+                style={[styles.citySelectorOuter, elevation.subtle]}
+                contentStyle={[
+                  styles.citySelectorInner,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <View style={styles.cityLeft}>
                   <View
-                    className="mt-2 self-start rounded-lg px-2.5 py-1"
-                    style={{ backgroundColor: theme.accentSoft }}
+                    style={[
+                      styles.cityIconBox,
+                      CONTINUOUS_CORNER,
+                      { backgroundColor: theme.accentSoft },
+                    ]}
                   >
-                    <Text className="text-xs font-bold" style={{ color: theme.accentText }}>
-                      Група {selectedAddress.groupId}
+                    <Building2 size={17} color={theme.accent} strokeWidth={2.1} />
+                  </View>
+                  <View style={styles.cityTextWrap}>
+                    <Text style={[TYPOGRAPHY.caption, { color: theme.textMuted }]}>
+                      Населений пункт
+                    </Text>
+                    <Text
+                      style={[TYPOGRAPHY.callout, styles.cityValue, { color: theme.text }]}
+                      numberOfLines={1}
+                    >
+                      {selectedCity.name}
+                      {selectedCity.otgName ? ` (${selectedCity.otgName} ОТГ)` : ''}
                     </Text>
                   </View>
                 </View>
 
-                <Pressable
-                  onPress={() => setSelectedAddress(null)}
-                  className="h-9 w-9 items-center justify-center rounded-full"
-                  style={{ backgroundColor: theme.surfaceMuted }}
-                  accessibilityLabel="Змінити адресу"
-                >
-                  <X size={16} color={theme.textSecondary} />
-                </Pressable>
-              </View>
+                <ChevronDown size={18} color={theme.textMuted} strokeWidth={2.2} />
+              </InteractiveSurface>
 
               <View
-                className="mt-5 pt-4"
-                style={{ borderTopWidth: 1, borderTopColor: theme.borderSubtle }}
+                style={[
+                  styles.searchField,
+                  CONTINUOUS_CORNER,
+                  elevation.subtle,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: isSearchFocused ? theme.accent : theme.border,
+                    borderWidth: isSearchFocused ? 1.5 : LAYOUT.borderWidth,
+                  },
+                ]}
               >
-                <View className="flex-row items-center gap-1.5">
-                  <Tag size={15} color={theme.textSecondary} />
-                  <Text className="text-sm font-semibold" style={{ color: theme.text }}>
-                    Мітка локації (необовʼязково)
-                  </Text>
-                </View>
-                <Text className="mt-0.5 text-xs" style={{ color: theme.textMuted }}>
-                  Допоможе швидше орієнтуватися серед кількох адрес
-                </Text>
-
+                <Search size={19} color={isSearchFocused ? theme.accent : theme.textMuted} />
                 <TextInput
-                  value={label}
-                  onChangeText={setLabel}
-                  placeholder="Наприклад: Дім, Робота, Батьки"
+                  value={query}
+                  onChangeText={setQuery}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setIsSearchFocused(false)}
+                  placeholder={
+                    selectedCity.id === LVIV_CITY_ID
+                      ? 'Вулиця та будинок, напр.: вел 50'
+                      : 'Введіть вулицю та номер будинку'
+                  }
                   placeholderTextColor={theme.textMuted}
-                  maxLength={32}
-                  className="mt-3 rounded-xl border px-3.5 py-3 text-base"
-                  style={{
-                    backgroundColor: theme.surfaceInput,
-                    borderColor: theme.border,
-                    color: theme.text,
-                  }}
+                  returnKeyType="search"
+                  style={[TYPOGRAPHY.body, styles.searchInput, { color: theme.text }]}
                 />
-
-                <View className="mt-2.5 flex-row flex-wrap gap-2">
-                  {LABEL_SUGGESTIONS.map((preset) => (
-                    <Pressable
-                      key={preset}
-                      onPress={() => setLabel(preset)}
-                      className="rounded-lg border px-3 py-1.5"
-                      style={{
-                        backgroundColor: label === preset ? theme.accentSoft : theme.surfaceInput,
-                        borderColor: label === preset ? theme.accent : theme.border,
-                      }}
-                    >
-                      <Text
-                        className="text-xs font-medium"
-                        style={{ color: label === preset ? theme.accentText : theme.textSecondary }}
-                      >
-                        {preset}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-
-              <View className="mt-6 flex-row gap-2.5">
-                <Pressable
-                  onPress={() => setSelectedAddress(null)}
-                  className="flex-1 items-center rounded-2xl border py-3.5"
-                  style={{ borderColor: theme.border, backgroundColor: theme.surfaceInput }}
-                >
-                  <Text className="text-sm font-semibold" style={{ color: theme.textSecondary }}>
-                    Назад
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={handleSavePress}
-                  className="flex-1 flex-row items-center justify-center gap-1.5 rounded-2xl py-3.5"
-                  style={{ backgroundColor: theme.accent }}
-                >
-                  <Check size={17} color={theme.accentOnSolid} />
-                  <Text className="text-sm font-semibold" style={{ color: theme.accentOnSolid }}>
-                    Зберегти
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          </ScrollView>
-        ) : (
-          <View className="flex-1 px-4 pt-1">
-            <Pressable
-              onPress={() => setCityModalVisible(true)}
-              className="mb-2.5 flex-row items-center justify-between rounded-2xl border px-3.5 py-2.5"
-              style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-            >
-              <View className="flex-row items-center gap-2.5">
-                <View
-                  className="h-8 w-8 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: theme.accentSoft }}
-                >
-                  <Building2 size={16} color={theme.accent} />
-                </View>
-                <View>
-                  <Text className="text-[11px]" style={{ color: theme.textMuted }}>
-                    Населений пункт
-                  </Text>
-                  <Text className="text-sm font-bold" style={{ color: theme.text }}>
-                    {selectedCity.name}
-                    {selectedCity.otgName ? ` (${selectedCity.otgName} ОТГ)` : ''}
-                  </Text>
-                </View>
-              </View>
-
-              <ChevronDown size={18} color={theme.textMuted} />
-            </Pressable>
-
-            <View
-              className="flex-row items-center rounded-2xl border px-3.5"
-              style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-            >
-              <Search size={20} color={theme.textMuted} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder={
-                  selectedCity.id === LVIV_CITY_ID
-                    ? 'Вулиця та будинок, напр.: вел 50'
-                    : 'Введіть вулицю та номер будинку'
-                }
-                placeholderTextColor={theme.textMuted}
-                returnKeyType="search"
-                className="ml-2.5 flex-1 py-3.5 text-base"
-                style={{ color: theme.text }}
-              />
-              {isLoading ? (
-                <ActivityIndicator size="small" color={theme.accent} />
-              ) : query.length > 0 ? (
-                <Pressable
-                  onPress={() => setQuery('')}
-                  className="p-1"
-                  accessibilityLabel="Очистити пошук"
-                >
-                  <X size={18} color={theme.textMuted} />
-                </Pressable>
-              ) : null}
-            </View>
-
-            <ScrollView
-              className="mt-3 flex-1"
-              contentContainerStyle={{ paddingBottom: 112 }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {error ? (
-                <View
-                  className="rounded-2xl border p-4"
-                  style={{ backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }}
-                >
-                  <Text className="text-sm font-medium" style={{ color: theme.dangerText }}>
-                    {error}
-                  </Text>
-                </View>
-              ) : null}
-
-              {!isLoading && !error && hasSearched && items.length === 0 ? (
-                <View
-                  className="items-center rounded-2xl border px-6 py-10"
-                  style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-                >
-                  <Text className="text-base font-bold" style={{ color: theme.text }}>
-                    Нічого не знайдено
-                  </Text>
-                  <Text className="mt-1.5 text-center text-sm" style={{ color: theme.textMuted }}>
-                    Спробуйте ввести коротшу частину назви вулиці або перевірте обраний населений
-                    пункт ({selectedCity.name}).
-                  </Text>
-                </View>
-              ) : null}
-
-              {query.trim().length < 2 ? (
-                <View
-                  className="mt-1 rounded-2xl border p-4"
-                  style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-                >
-                  <Text
-                    className="text-xs font-semibold uppercase tracking-wide"
-                    style={{ color: theme.textMuted }}
-                  >
-                    Приклади швидкого пошуку ({selectedCity.name})
-                  </Text>
-                  <View className="mt-2.5 flex-row flex-wrap gap-2">
-                    {quickExamples.map((example) => (
-                      <Pressable
-                        key={example}
-                        onPress={() => setQuery(example)}
-                        className="rounded-xl border px-3 py-2"
-                        style={{
-                          backgroundColor: theme.surfaceInput,
-                          borderColor: theme.border,
-                        }}
-                      >
-                        <Text
-                          className="text-xs font-medium"
-                          style={{ color: theme.textSecondary }}
-                        >
-                          {example}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-              ) : null}
-
-              {items.length > 0 ? (
-                <View
-                  className="overflow-hidden rounded-2xl border"
-                  style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-                >
-                  {items.map((item, idx) => {
-                    const alreadySaved = locations.some(
-                      (loc) =>
-                        loc.id === item.id ||
-                        (loc.streetId === item.streetId && loc.buildingName === item.buildingName),
-                    );
-                    return (
-                      <Pressable
-                        key={item.id}
-                        onPress={() => handleSelectResult(item)}
-                        className="flex-row items-center px-4 py-3.5"
-                        style={
-                          idx > 0
-                            ? { borderTopWidth: 1, borderTopColor: theme.borderSubtle }
-                            : undefined
-                        }
-                      >
-                        <View
-                          className="h-9 w-9 items-center justify-center rounded-xl"
-                          style={{ backgroundColor: theme.accentSoft }}
-                        >
-                          <MapPin size={17} color={theme.accent} />
-                        </View>
-
-                        <View className="ml-3 flex-1">
-                          <Text className="text-sm font-semibold" style={{ color: theme.text }}>
-                            {item.fullAddress} — Група {item.groupId}
-                          </Text>
-                          {alreadySaved ? (
-                            <Text
-                              className="mt-0.5 text-xs font-medium"
-                              style={{ color: theme.onIcon }}
-                            >
-                              Вже збережено у списку
-                            </Text>
-                          ) : null}
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : null}
-            </ScrollView>
-          </View>
-        )}
-      </KeyboardAvoidingView>
-
-      <Modal
-        visible={cityModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCityModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <Pressable
-            className="flex-1 justify-end bg-black/50"
-            onPress={() => setCityModalVisible(false)}
-          >
-            <Pressable
-              className="max-h-[82%] rounded-t-3xl px-5 pb-8 pt-4"
-              style={{
-                backgroundColor: theme.surface,
-                borderTopWidth: 1,
-                borderTopColor: theme.border,
-              }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View
-                className="mb-3 h-1.5 w-12 self-center rounded-full"
-                style={{ backgroundColor: theme.border }}
-              />
-
-              <View className="flex-row items-center justify-between">
-                <Text className="text-lg font-bold" style={{ color: theme.text }}>
-                  Населений пункт
-                </Text>
-                <Pressable
-                  onPress={() => setCityModalVisible(false)}
-                  className="h-9 w-9 items-center justify-center rounded-full"
-                  style={{ backgroundColor: theme.surfaceMuted }}
-                >
-                  <X size={18} color={theme.textSecondary} />
-                </Pressable>
-              </View>
-
-              <Text className="mt-1 text-xs" style={{ color: theme.textMuted }}>
-                Понад 2 000 міст і сіл Львівської області
-              </Text>
-
-              <View
-                className="mt-3 flex-row items-center rounded-xl border px-3"
-                style={{ backgroundColor: theme.surfaceInput, borderColor: theme.border }}
-              >
-                <Search size={18} color={theme.textMuted} />
-                <TextInput
-                  value={cityQuery}
-                  onChangeText={setCityQuery}
-                  placeholder="Пошук міста або села (напр.: Дрогобич, Стрий)..."
-                  placeholderTextColor={theme.textMuted}
-                  autoFocus
-                  className="ml-2 flex-1 py-3 text-base"
-                  style={{ color: theme.text }}
-                />
-                {isCitiesLoading ? (
+                {isLoading ? (
                   <ActivityIndicator size="small" color={theme.accent} />
-                ) : cityQuery.length > 0 ? (
-                  <Pressable onPress={() => setCityQuery('')}>
-                    <X size={16} color={theme.textMuted} />
+                ) : query.length > 0 ? (
+                  <Pressable
+                    onPress={() => setQuery('')}
+                    hitSlop={HIT_SLOP_STANDARD}
+                    accessibilityRole="button"
+                    accessibilityLabel="Очистити пошук"
+                    style={styles.clearBtn}
+                  >
+                    <X size={17} color={theme.textMuted} />
                   </Pressable>
                 ) : null}
               </View>
 
               <ScrollView
-                className="mt-3 max-h-[360px]"
+                style={styles.resultsScroll}
+                contentContainerStyle={styles.resultsContent}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {cityError && !isCitiesLoading ? (
+                {error ? (
                   <View
-                    className="items-center rounded-2xl border px-4 py-6"
-                    style={{ backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }}
+                    style={[
+                      styles.errorCard,
+                      CONTINUOUS_CORNER,
+                      {
+                        backgroundColor: theme.dangerBg,
+                        borderColor: theme.dangerBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={[TYPOGRAPHY.callout, { color: theme.dangerText }]}>{error}</Text>
+                  </View>
+                ) : null}
+
+                {!isLoading && !error && hasSearched && items.length === 0 ? (
+                  <View
+                    style={[
+                      styles.emptySearchCard,
+                      CONTINUOUS_CORNER,
+                      elevation.card,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  >
+                    <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>
+                      Нічого не знайдено
+                    </Text>
+                    <Text
+                      style={[
+                        TYPOGRAPHY.subhead,
+                        styles.emptySearchText,
+                        { color: theme.textMuted },
+                      ]}
+                    >
+                      Спробуйте ввести коротшу частину назви вулиці або перевірте обраний населений
+                      пункт ({selectedCity.name}).
+                    </Text>
+                  </View>
+                ) : null}
+
+                {query.trim().length < 2 ? (
+                  <View
+                    style={[
+                      styles.examplesCard,
+                      CONTINUOUS_CORNER,
+                      elevation.card,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: theme.border,
+                      },
+                    ]}
                   >
                     <Text
-                      className="text-center text-sm font-medium"
-                      style={{ color: theme.dangerText }}
+                      style={[
+                        TYPOGRAPHY.caption,
+                        styles.examplesKicker,
+                        { color: theme.textMuted },
+                      ]}
                     >
-                      {cityError}
+                      ПРИКЛАДИ ШВИДКОГО ПОШУКУ ({selectedCity.name.toUpperCase()})
                     </Text>
-                    <Pressable
-                      onPress={() => fetchCities(cityQuery)}
-                      className="mt-3 rounded-xl px-4 py-2"
-                      style={{ backgroundColor: theme.accent }}
-                    >
-                      <Text
-                        className="text-xs font-semibold"
-                        style={{ color: theme.accentOnSolid }}
-                      >
-                        Спробувати ще раз
-                      </Text>
-                    </Pressable>
-                  </View>
-                ) : cityResults.length === 0 && !isCitiesLoading ? (
-                  <View className="items-center py-8">
-                    <Text className="text-sm" style={{ color: theme.textMuted }}>
-                      Населених пунктів не знайдено
-                    </Text>
-                  </View>
-                ) : (
-                  <View className="gap-2 pb-2">
-                    {cityResults.map((city) => {
-                      const isActive = city.id === selectedCity.id;
-                      return (
-                        <Pressable
-                          key={city.id}
-                          onPress={() => handleSelectCity(city)}
-                          className="flex-row items-center justify-between rounded-2xl border px-3.5 py-3"
-                          style={{
-                            backgroundColor: isActive ? theme.accentSoft : theme.surfaceInput,
-                            borderColor: isActive ? theme.accent : theme.border,
-                          }}
+                    <View style={styles.chipsRow}>
+                      {quickExamples.map((example) => (
+                        <InteractiveSurface
+                          key={example}
+                          onPress={() => setQuery(example)}
+                          accessibilityRole="button"
+                          borderRadius={RADII.pill}
+                          contentStyle={[
+                            styles.chip,
+                            {
+                              backgroundColor: theme.surfaceInput,
+                              borderColor: theme.border,
+                            },
+                          ]}
                         >
-                          <View className="flex-1 pr-2">
-                            <Text className="text-sm font-bold" style={{ color: theme.text }}>
-                              {city.name}
-                            </Text>
-                            {city.otgName ? (
-                              <Text className="text-xs" style={{ color: theme.textMuted }}>
-                                {city.otgName} громада
-                              </Text>
-                            ) : null}
-                          </View>
+                          <Text style={[TYPOGRAPHY.subhead, { color: theme.textSecondary }]}>
+                            {example}
+                          </Text>
+                        </InteractiveSurface>
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
 
-                          {isActive ? (
+                {items.length > 0 ? (
+                  <View
+                    style={[
+                      styles.resultsListCard,
+                      CONTINUOUS_CORNER,
+                      elevation.card,
+                      {
+                        backgroundColor: theme.surface,
+                        borderColor: theme.border,
+                      },
+                    ]}
+                  >
+                    {items.map((item, idx) => {
+                      const alreadySaved = locations.some(
+                        (loc) =>
+                          loc.id === item.id ||
+                          (loc.streetId === item.streetId &&
+                            loc.buildingName === item.buildingName),
+                      );
+                      return (
+                        <View key={item.id}>
+                          {idx > 0 ? (
                             <View
-                              className="h-7 w-7 items-center justify-center rounded-full"
-                              style={{ backgroundColor: theme.accent }}
-                            >
-                              <Check size={15} color={theme.accentOnSolid} />
-                            </View>
+                              style={[
+                                styles.insetDivider,
+                                { backgroundColor: interactive.divider },
+                              ]}
+                            />
                           ) : null}
-                        </Pressable>
+                          <InteractiveSurface
+                            onPress={() => handleSelectResult(item)}
+                            scaleVariant="none"
+                            accessibilityRole="button"
+                            contentStyle={styles.resultRow}
+                          >
+                            <View
+                              style={[
+                                styles.resultIcon,
+                                CONTINUOUS_CORNER,
+                                { backgroundColor: theme.accentSoft },
+                              ]}
+                            >
+                              <MapPin size={17} color={theme.accent} strokeWidth={2.1} />
+                            </View>
+
+                            <View style={styles.resultTextWrap}>
+                              <Text
+                                style={[
+                                  TYPOGRAPHY.callout,
+                                  styles.resultAddress,
+                                  { color: theme.text },
+                                ]}
+                              >
+                                {item.fullAddress}
+                              </Text>
+                              {alreadySaved ? (
+                                <Text
+                                  style={[
+                                    TYPOGRAPHY.footnote,
+                                    styles.savedHint,
+                                    { color: theme.onIcon },
+                                  ]}
+                                >
+                                  Вже збережено у списку
+                                </Text>
+                              ) : null}
+                            </View>
+
+                            <View
+                              style={[
+                                styles.resultGroupBadge,
+                                CONTINUOUS_CORNER,
+                                { backgroundColor: theme.accentSoft },
+                              ]}
+                            >
+                              <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>
+                                {item.groupId}
+                              </Text>
+                            </View>
+                          </InteractiveSurface>
+                        </View>
                       );
                     })}
                   </View>
-                )}
+                ) : null}
               </ScrollView>
+            </View>
+          )}
+        </Animated.View>
+      </KeyboardAvoidingView>
+
+      <AppBottomSheet
+        visible={cityModalVisible}
+        onClose={() => {
+          setIsCitySearchFocused(false);
+          setCityModalVisible(false);
+        }}
+        title="Населений пункт"
+        subtitle="Понад 2 000 міст і сіл Львівської області"
+        avoidKeyboard
+        maxHeightRatio={0.84}
+      >
+        <View
+          style={[
+            styles.modalSearchBox,
+            CONTINUOUS_CORNER,
+            {
+              backgroundColor: theme.surfaceInput,
+              borderColor: isCitySearchFocused ? theme.accent : theme.border,
+              borderWidth: isCitySearchFocused ? 1.5 : LAYOUT.borderWidth,
+            },
+          ]}
+        >
+          <Search size={18} color={isCitySearchFocused ? theme.accent : theme.textMuted} />
+          <TextInput
+            value={cityQuery}
+            onChangeText={setCityQuery}
+            onFocus={() => setIsCitySearchFocused(true)}
+            onBlur={() => setIsCitySearchFocused(false)}
+            placeholder="Пошук міста або села (напр.: Дрогобич, Стрий)…"
+            placeholderTextColor={theme.textMuted}
+            autoFocus
+            style={[TYPOGRAPHY.body, styles.modalSearchInput, { color: theme.text }]}
+          />
+          {isCitiesLoading ? (
+            <ActivityIndicator size="small" color={theme.accent} />
+          ) : cityQuery.length > 0 ? (
+            <Pressable
+              onPress={() => setCityQuery('')}
+              hitSlop={HIT_SLOP_STANDARD}
+              accessibilityLabel="Очистити пошук"
+            >
+              <X size={16} color={theme.textMuted} />
             </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+          ) : null}
+        </View>
+
+        <ScrollView
+          style={styles.cityList}
+          contentContainerStyle={styles.cityListContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {cityError && !isCitiesLoading ? (
+            <View
+              style={[
+                styles.cityErrorBox,
+                CONTINUOUS_CORNER,
+                {
+                  backgroundColor: theme.dangerBg,
+                  borderColor: theme.dangerBorder,
+                },
+              ]}
+            >
+              <Text style={[TYPOGRAPHY.callout, styles.cityErrorText, { color: theme.dangerText }]}>
+                {cityError}
+              </Text>
+              <InteractiveSurface
+                onPress={() => fetchCities(cityQuery)}
+                rippleTone="accent"
+                borderRadius={RADII.md}
+                style={styles.cityRetryOuter}
+                contentStyle={[styles.cityRetryBtn, { backgroundColor: theme.accent }]}
+              >
+                <Text style={[TYPOGRAPHY.subhead, { color: theme.accentOnSolid }]}>
+                  Спробувати ще раз
+                </Text>
+              </InteractiveSurface>
+            </View>
+          ) : cityResults.length === 0 && !isCitiesLoading ? (
+            <View style={styles.cityEmpty}>
+              <Text style={[TYPOGRAPHY.callout, { color: theme.textMuted }]}>
+                Населених пунктів не знайдено
+              </Text>
+            </View>
+          ) : (
+            cityResults.map((city) => {
+              const isActive = city.id === selectedCity.id;
+              return (
+                <InteractiveSurface
+                  key={city.id}
+                  onPress={() => handleSelectCity(city)}
+                  scaleVariant="card"
+                  borderRadius={RADII.lg}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  contentStyle={[
+                    styles.cityRow,
+                    {
+                      backgroundColor: isActive ? theme.accentSoft : theme.surfaceInput,
+                      borderColor: isActive ? theme.accent : theme.border,
+                      borderWidth: isActive ? 1.5 : LAYOUT.borderWidth,
+                    },
+                  ]}
+                >
+                  <View style={styles.cityRowText}>
+                    <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>{city.name}</Text>
+                    {city.otgName ? (
+                      <Text style={[TYPOGRAPHY.footnote, { color: theme.textMuted }]}>
+                        {city.otgName} громада
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {isActive ? (
+                    <View style={[styles.checkCircle, { backgroundColor: theme.accent }]}>
+                      <Check size={14} color={theme.accentOnSolid} strokeWidth={2.6} />
+                    </View>
+                  ) : null}
+                </InteractiveSurface>
+              );
+            })
+          )}
+        </ScrollView>
+      </AppBottomSheet>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
+  },
+  headerSubtitle: {
+    marginTop: 2,
+  },
+  searchContainer: {
+    flex: 1,
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.xxs,
+  },
+  citySelectorOuter: {
+    marginBottom: SPACING.sm - 2,
+  },
+  citySelectorInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 11,
+  },
+  cityLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm - 2,
+  },
+  cityIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: RADII.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cityTextWrap: {
+    flex: 1,
+    gap: 1,
+  },
+  cityValue: {
+    fontWeight: '600',
+  },
+  searchField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADII.lg,
+    paddingHorizontal: SPACING.sm + 2,
+    minHeight: 48,
+    gap: SPACING.xs + 2,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 12,
+  },
+  clearBtn: {
+    padding: 4,
+  },
+  resultsScroll: {
+    flex: 1,
+    marginTop: SPACING.sm,
+  },
+  resultsContent: {
+    paddingBottom: LAYOUT.tabBarClearance,
+    gap: SPACING.sm,
+  },
+  errorCard: {
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    padding: SPACING.md,
+  },
+  emptySearchCard: {
+    alignItems: 'center',
+    borderRadius: RADII.xl,
+    borderWidth: LAYOUT.borderWidth,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xxl,
+  },
+  emptySearchText: {
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  examplesCard: {
+    borderRadius: RADII.xl,
+    borderWidth: LAYOUT.borderWidth,
+    padding: LAYOUT.cardPadding,
+  },
+  examplesKicker: {
+    letterSpacing: 0.5,
+  },
+  chipsRow: {
+    marginTop: SPACING.sm - 2,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  chip: {
+    minHeight: 36,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 7,
+    borderRadius: RADII.pill,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultsListCard: {
+    borderRadius: RADII.xl,
+    borderWidth: LAYOUT.borderWidth,
+    overflow: 'hidden',
+  },
+  insetDivider: {
+    height: LAYOUT.borderWidth,
+    marginLeft: 62,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 13,
+    gap: SPACING.sm,
+  },
+  resultIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: RADII.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resultTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  resultAddress: {
+    fontWeight: '600',
+  },
+  savedHint: {
+    fontWeight: '600',
+  },
+  resultGroupBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: RADII.pill,
+  },
+  confirmScroll: {
+    flex: 1,
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.xxs,
+  },
+  confirmContent: {
+    paddingBottom: LAYOUT.tabBarClearance,
+  },
+  confirmCard: {
+    borderRadius: RADII.xl,
+    borderWidth: 1.5,
+    padding: LAYOUT.cardPadding,
+  },
+  confirmHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  confirmTitleWrap: {
+    flex: 1,
+  },
+  confirmKicker: {
+    letterSpacing: 0.5,
+  },
+  confirmAddress: {
+    marginTop: SPACING.xxs,
+  },
+  groupPill: {
+    marginTop: SPACING.xs + 2,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADII.pill,
+  },
+  closeCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: RADII.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  labelSection: {
+    marginTop: SPACING.lg,
+    paddingTop: SPACING.md,
+    borderTopWidth: LAYOUT.borderWidth,
+  },
+  labelHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  labelHint: {
+    marginTop: 2,
+  },
+  labelInput: {
+    marginTop: SPACING.sm,
+    borderRadius: RADII.md + 2,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 12,
+    minHeight: 48,
+  },
+  confirmActions: {
+    marginTop: SPACING.lg,
+    flexDirection: 'row',
+    gap: SPACING.sm - 2,
+  },
+  actionFlex: {
+    flex: 1,
+  },
+  secondaryBtn: {
+    minHeight: 50,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryBtn: {
+    minHeight: 50,
+    borderRadius: RADII.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  modalSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: RADII.md + 2,
+    paddingHorizontal: SPACING.sm,
+    minHeight: 46,
+    gap: SPACING.xs,
+  },
+  modalSearchInput: {
+    flex: 1,
+    paddingVertical: 10,
+  },
+  cityList: {
+    marginTop: SPACING.sm,
+    maxHeight: 360,
+  },
+  cityListContent: {
+    gap: SPACING.xs + 2,
+    paddingBottom: SPACING.xs,
+  },
+  cityErrorBox: {
+    alignItems: 'center',
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
+  },
+  cityErrorText: {
+    textAlign: 'center',
+  },
+  cityRetryOuter: {
+    marginTop: SPACING.sm,
+  },
+  cityRetryBtn: {
+    minHeight: 40,
+    paddingHorizontal: SPACING.md,
+    borderRadius: RADII.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cityEmpty: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xxl,
+  },
+  cityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: RADII.lg,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  cityRowText: {
+    flex: 1,
+    gap: 1,
+  },
+  checkCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: RADII.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

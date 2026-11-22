@@ -1,7 +1,17 @@
 import { useAppStore, useAppTheme } from '@/entities/location/model/store';
+import {
+  CONTINUOUS_CORNER,
+  LAYOUT,
+  RADII,
+  SPACING,
+  TABULAR_NUMS,
+  TYPOGRAPHY,
+} from '@/shared/theme/tokens';
+import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
+import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
 import { REMINDER_MINUTES_OPTIONS, type ReminderMinutes } from '@is-light/shared';
-import { Bell, Info, X } from 'lucide-react-native';
-import { Modal, Pressable, Switch, Text, View } from 'react-native';
+import { Bell, Info } from 'lucide-react-native';
+import { Platform, StyleSheet, Switch, Text, View } from 'react-native';
 
 interface NotificationSettingsModalProps {
   visible: boolean;
@@ -23,156 +33,220 @@ export function NotificationSettingsModal({ visible, onClose }: NotificationSett
   const isEnabled = reminderMinutes > 0;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable className="flex-1 justify-end bg-black/50" onPress={onClose}>
-        <Pressable
-          className="rounded-t-3xl px-5 pb-8 pt-4"
-          style={{
-            backgroundColor: theme.surface,
-            borderTopWidth: 1,
-            borderTopColor: theme.border,
+    <AppBottomSheet
+      visible={visible}
+      onClose={onClose}
+      title="Сповіщення"
+      subtitle="Нагадування працюють для основної локації навіть без інтернету"
+      icon={<Bell size={20} color={theme.accent} strokeWidth={2.2} />}
+    >
+      <View
+        style={[
+          styles.switchCard,
+          CONTINUOUS_CORNER,
+          {
+            backgroundColor: theme.surfaceInput,
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        <View style={styles.switchTextWrap}>
+          <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>
+            Нагадувати перед відключенням
+          </Text>
+          <Text style={[TYPOGRAPHY.footnote, TABULAR_NUMS, { color: theme.textMuted }]}>
+            {isEnabled
+              ? `Сповіщення прийде за ${reminderMinutes} хв до вимкнення світла`
+              : 'Локальні нагадування вимкнено'}
+          </Text>
+        </View>
+
+        <Switch
+          value={isEnabled}
+          onValueChange={toggleRemindersEnabled}
+          trackColor={{
+            false: theme.border,
+            true: Platform.OS === 'ios' ? theme.accent : theme.accentSoft,
           }}
-          onPress={(e) => e.stopPropagation()}
-        >
-          <View
-            className="mb-3 h-1.5 w-12 self-center rounded-full"
-            style={{ backgroundColor: theme.border }}
-          />
+          thumbColor={
+            Platform.OS === 'android' ? (isEnabled ? theme.accent : theme.surfaceMuted) : undefined
+          }
+          ios_backgroundColor={theme.border}
+        />
+      </View>
 
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center gap-2">
-              <Bell size={20} color={theme.accent} />
-              <Text className="text-lg font-bold" style={{ color: theme.text }}>
-                Сповіщення
-              </Text>
-            </View>
-            <Pressable
-              onPress={onClose}
-              className="h-9 w-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: theme.surfaceMuted }}
-              accessibilityLabel="Закрити"
-            >
-              <X size={18} color={theme.textSecondary} />
-            </Pressable>
-          </View>
+      <Text style={[TYPOGRAPHY.caption, styles.sectionLabel, { color: theme.textMuted }]}>
+        ІНТЕРВАЛ НАГАДУВАННЯ
+      </Text>
 
-          <Text className="mt-1 text-sm" style={{ color: theme.textMuted }}>
-            Нагадування працюють для основної локації навіть без інтернету
-          </Text>
-
-          <View
-            className="mt-4 flex-row items-center justify-between rounded-2xl border p-4"
-            style={{
-              backgroundColor: theme.surfaceInput,
-              borderColor: theme.border,
-            }}
-          >
-            <View className="flex-1 pr-3">
-              <Text className="text-base font-semibold" style={{ color: theme.text }}>
-                Нагадувати перед відключенням
-              </Text>
-              <Text className="mt-0.5 text-xs" style={{ color: theme.textMuted }}>
-                {isEnabled
-                  ? `Сповіщення прийде за ${reminderMinutes} хв до вимкнення світла`
-                  : 'Локальні нагадування вимкнено'}
-              </Text>
-            </View>
-
-            <Switch
-              value={isEnabled}
-              onValueChange={toggleRemindersEnabled}
-              trackColor={{ false: theme.border, true: theme.accentSoft }}
-              thumbColor={isEnabled ? theme.accent : theme.surfaceMuted}
-            />
-          </View>
-
-          <Text
-            className="mt-4 text-xs font-semibold uppercase tracking-wide"
-            style={{ color: theme.textMuted }}
-          >
-            Інтервал нагадування
-          </Text>
-
-          <View className="mt-2.5 flex-row flex-wrap gap-2">
-            {ACTIVE_INTERVALS.map((minutes) => {
-              const selected = reminderMinutes === minutes;
-              return (
-                <Pressable
-                  key={minutes}
-                  onPress={() => setReminderMinutes(minutes)}
-                  className="rounded-xl border px-4 py-2.5"
-                  style={{
-                    backgroundColor: selected ? theme.accent : theme.surfaceInput,
-                    borderColor: selected ? theme.accent : theme.border,
-                  }}
-                >
-                  <Text
-                    className="text-sm font-semibold"
-                    style={{
-                      color: selected ? theme.accentOnSolid : theme.textSecondary,
-                    }}
-                  >
-                    {minutes} хв
-                  </Text>
-                </Pressable>
-              );
-            })}
-
-            <Pressable
-              onPress={() => setReminderMinutes(0)}
-              className="rounded-xl border px-4 py-2.5"
-              style={{
-                backgroundColor: reminderMinutes === 0 ? theme.text : theme.surfaceInput,
-                borderColor: reminderMinutes === 0 ? theme.text : theme.border,
-              }}
+      <View style={styles.chipsWrap}>
+        {ACTIVE_INTERVALS.map((minutes) => {
+          const selected = reminderMinutes === minutes;
+          return (
+            <InteractiveSurface
+              key={minutes}
+              onPress={() => setReminderMinutes(minutes)}
+              rippleTone={selected ? 'accent' : 'neutral'}
+              borderRadius={RADII.md}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              contentStyle={[
+                styles.chip,
+                {
+                  backgroundColor: selected ? theme.accent : theme.surfaceInput,
+                  borderColor: selected ? theme.accent : theme.border,
+                },
+              ]}
             >
               <Text
-                className="text-sm font-semibold"
-                style={{
-                  color: reminderMinutes === 0 ? theme.bg : theme.textSecondary,
-                }}
+                style={[
+                  TYPOGRAPHY.callout,
+                  TABULAR_NUMS,
+                  {
+                    fontWeight: '600',
+                    color: selected ? theme.accentOnSolid : theme.textSecondary,
+                  },
+                ]}
               >
-                Вимкнено
+                {minutes} хв
               </Text>
-            </Pressable>
-          </View>
+            </InteractiveSurface>
+          );
+        })}
 
-          <View
-            className="mt-5 rounded-2xl border p-3.5"
-            style={{
-              backgroundColor: theme.surfaceInput,
-              borderColor: theme.border,
-            }}
+        <InteractiveSurface
+          onPress={() => setReminderMinutes(0)}
+          borderRadius={RADII.md}
+          accessibilityRole="button"
+          accessibilityState={{ selected: reminderMinutes === 0 }}
+          contentStyle={[
+            styles.chip,
+            {
+              backgroundColor: reminderMinutes === 0 ? theme.text : theme.surfaceInput,
+              borderColor: reminderMinutes === 0 ? theme.text : theme.border,
+            },
+          ]}
+        >
+          <Text
+            style={[
+              TYPOGRAPHY.callout,
+              {
+                fontWeight: '600',
+                color: reminderMinutes === 0 ? theme.bg : theme.textSecondary,
+              },
+            ]}
           >
-            <View className="flex-row items-start gap-2.5">
-              <Info size={16} color={expoPushToken ? theme.onIcon : theme.partialIcon} />
-              <View className="flex-1">
-                <Text className="text-xs font-semibold" style={{ color: theme.text }}>
-                  {expoPushToken
-                    ? 'Фонові push-сповіщення про зміну графіка активні'
-                    : 'Фонові push-сповіщення обмежені'}
-                </Text>
-                <Text className="mt-0.5 text-xs leading-4" style={{ color: theme.textSecondary }}>
-                  {expoPushToken
-                    ? 'Ви автоматично отримаєте повідомлення, щойно Львівобленерго оновить графік для вашої основної групи.'
-                    : (remotePushNotice ??
-                      'Віддалені push-сповіщення наразі недоступні, але локальні нагадування перед відключенням працюють у звичайному режимі.')}
-                </Text>
-              </View>
-            </View>
-          </View>
+            Вимкнено
+          </Text>
+        </InteractiveSurface>
+      </View>
 
-          <Pressable
-            onPress={onClose}
-            className="mt-5 items-center rounded-2xl py-3.5"
-            style={{ backgroundColor: theme.accent }}
-          >
-            <Text className="text-sm font-semibold" style={{ color: theme.accentOnSolid }}>
-              Готово
-            </Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      <View
+        style={[
+          styles.infoCard,
+          CONTINUOUS_CORNER,
+          {
+            backgroundColor: theme.surfaceInput,
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        <Info
+          size={17}
+          color={expoPushToken ? theme.onIcon : theme.partialIcon}
+          style={styles.infoIcon}
+        />
+        <View style={styles.infoTextWrap}>
+          <Text style={[TYPOGRAPHY.subhead, styles.infoTitle, { color: theme.text }]}>
+            {expoPushToken
+              ? 'Фонові push-сповіщення про зміну графіка активні'
+              : 'Фонові push-сповіщення обмежені'}
+          </Text>
+          <Text style={[TYPOGRAPHY.footnote, styles.infoBody, { color: theme.textSecondary }]}>
+            {expoPushToken
+              ? 'Ви автоматично отримаєте повідомлення, щойно Львівобленерго оновить графік для вашої основної групи.'
+              : (remotePushNotice ??
+                'Віддалені push-сповіщення наразі недоступні, але локальні нагадування перед відключенням працюють у звичайному режимі.')}
+          </Text>
+        </View>
+      </View>
+
+      <InteractiveSurface
+        onPress={onClose}
+        rippleTone="accent"
+        borderRadius={RADII.lg}
+        accessibilityRole="button"
+        style={styles.doneOuter}
+        contentStyle={[styles.doneButton, { backgroundColor: theme.accent }]}
+      >
+        <Text style={[TYPOGRAPHY.headline, { color: theme.accentOnSolid }]}>Готово</Text>
+      </InteractiveSurface>
+    </AppBottomSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  switchCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    padding: SPACING.md,
+  },
+  switchTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  sectionLabel: {
+    marginTop: SPACING.md,
+    letterSpacing: 0.6,
+  },
+  chipsWrap: {
+    marginTop: SPACING.xs + 2,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  chip: {
+    minHeight: 40,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs + 1,
+    borderRadius: RADII.md,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCard: {
+    marginTop: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm - 2,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    padding: SPACING.sm + 2,
+  },
+  infoIcon: {
+    marginTop: 1,
+  },
+  infoTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  infoTitle: {
+    fontWeight: '600',
+  },
+  infoBody: {
+    lineHeight: 17,
+  },
+  doneOuter: {
+    marginTop: SPACING.lg,
+  },
+  doneButton: {
+    minHeight: 50,
+    borderRadius: RADII.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

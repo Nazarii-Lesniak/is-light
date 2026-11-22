@@ -5,9 +5,21 @@ import { OutageGrid } from '@/entities/schedule/ui/OutageGrid';
 import { LocationPickerModal } from '@/features/location-picker/ui/LocationPickerModal';
 import { NotificationSettingsModal } from '@/features/notification-settings/ui/NotificationSettingsModal';
 import { ThemePickerModal } from '@/features/theme-picker/ui/ThemePickerModal';
+import {
+  CONTINUOUS_CORNER,
+  LAYOUT,
+  MOTION,
+  RADII,
+  SPACING,
+  TYPOGRAPHY,
+  getElevation,
+} from '@/shared/theme/tokens';
+import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
+import { type SegmentOption, SegmentedControl } from '@/shared/ui/SegmentedControl';
 import { formatKyivDate, formatUkrainianDateLabel } from '@is-light/shared';
 import { useRouter } from 'expo-router';
 import {
+  AlertTriangle,
   Bell,
   CalendarClock,
   ChevronDown,
@@ -17,8 +29,16 @@ import {
   RefreshCw,
   Zap,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 type DayTab = 'today' | 'tomorrow';
@@ -26,6 +46,7 @@ type DayTab = 'today' | 'tomorrow';
 export function HomeDashboard() {
   const router = useRouter();
   const theme = useAppTheme();
+  const elevation = getElevation(theme);
   const primaryLocation = useAppStore(selectPrimaryLocation);
   const locationsCount = useAppStore((s) => s.locations.length);
   const schedulesByGroup = useAppStore((s) => s.schedulesByGroup);
@@ -41,6 +62,9 @@ export function HomeDashboard() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [themePickerVisible, setThemePickerVisible] = useState(false);
+
+  const dayTransition = useRef(new Animated.Value(1)).current;
+  const prevDayRef = useRef<DayTab>(selectedDay);
 
   const primaryGroupId = primaryLocation?.groupId ?? null;
   const currentSchedule = primaryGroupId ? (schedulesByGroup[primaryGroupId] ?? null) : null;
@@ -103,71 +127,18 @@ export function HomeDashboard() {
     };
   }, [primaryGroupId, loadSchedule]);
 
-  if (!primaryLocation) {
-    return (
-      <SafeAreaView className="flex-1" style={{ backgroundColor: theme.bg }} edges={['top']}>
-        <View className="flex-row justify-end px-4 pt-2">
-          <Pressable
-            onPress={() => setThemePickerVisible(true)}
-            accessibilityLabel="Змінити тему"
-            className="h-11 w-11 items-center justify-center rounded-2xl border"
-            style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-          >
-            <Palette size={20} color={theme.textSecondary} />
-          </Pressable>
-        </View>
-
-        <View className="flex-1 items-center justify-center px-7 pb-24">
-          <View
-            className="h-20 w-20 items-center justify-center rounded-3xl"
-            style={{ backgroundColor: theme.accentSoft }}
-          >
-            <MapPin size={36} color={theme.accent} />
-          </View>
-          <Text className="mt-5 text-center text-2xl font-bold" style={{ color: theme.text }}>
-            Вітаємо в «Є Світло»
-          </Text>
-          <Text
-            className="mt-2.5 text-center text-sm leading-5"
-            style={{ color: theme.textSecondary }}
-          >
-            {locationsCount > 0
-              ? 'Оберіть основну адресу у Львівській області, щоб бачити актуальний графік відключень та отримувати сповіщення.'
-              : 'Додайте вашу адресу у Львові або Львівській області, щоб бачити погодинний графік відключень і отримувати нагадування.'}
-          </Text>
-
-          <Pressable
-            onPress={() => router.push('/(tabs)/add')}
-            className="mt-7 flex-row items-center gap-2 rounded-2xl px-6 py-4"
-            style={{ backgroundColor: theme.accent }}
-          >
-            <Plus size={18} color={theme.accentOnSolid} />
-            <Text className="text-base font-semibold" style={{ color: theme.accentOnSolid }}>
-              Додати адресу
-            </Text>
-          </Pressable>
-
-          {locationsCount > 0 ? (
-            <Pressable
-              onPress={() => setPickerVisible(true)}
-              className="mt-3 rounded-2xl border px-6 py-3.5"
-              style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-            >
-              <Text className="text-sm font-semibold" style={{ color: theme.text }}>
-                Обрати зі збережених адрес
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        <LocationPickerModal visible={pickerVisible} onClose={() => setPickerVisible(false)} />
-        <ThemePickerModal
-          visible={themePickerVisible}
-          onClose={() => setThemePickerVisible(false)}
-        />
-      </SafeAreaView>
-    );
-  }
+  useEffect(() => {
+    if (prevDayRef.current === selectedDay) {
+      return;
+    }
+    prevDayRef.current = selectedDay;
+    dayTransition.setValue(0);
+    Animated.timing(dayTransition, {
+      toValue: 1,
+      duration: MOTION.durationNormal,
+      useNativeDriver: true,
+    }).start();
+  }, [selectedDay, dayTransition]);
 
   const todayKyivDate = formatKyivDate(new Date());
   const rawToday = currentSchedule?.today ?? null;
@@ -180,17 +151,122 @@ export function HomeDashboard() {
   const hasActiveSchedule = Boolean(
     activeDaySchedule?.isPublished && activeDaySchedule.slots.length === 48,
   );
+  const isTomorrowPublished = Boolean(
+    tomorrowSchedule?.isPublished && tomorrowSchedule.slots.length === 48,
+  );
+
+  const dayOptions = useMemo<readonly SegmentOption<DayTab>[]>(
+    () => [
+      { value: 'today', label: 'Сьогодні' },
+      { value: 'tomorrow', label: 'Завтра', hasIndicator: isTomorrowPublished },
+    ],
+    [isTomorrowPublished],
+  );
+
+  if (!primaryLocation) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
+        <View style={styles.emptyTopBar}>
+          <InteractiveSurface
+            onPress={() => setThemePickerVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Змінити тему"
+            borderRadius={RADII.pill}
+            style={elevation.subtle}
+            contentStyle={[
+              styles.iconActionButton,
+              {
+                backgroundColor: theme.surface,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <Palette size={20} color={theme.textSecondary} />
+          </InteractiveSurface>
+        </View>
+
+        <View style={styles.emptyCenter}>
+          <View
+            style={[
+              styles.emptyIconBadge,
+              CONTINUOUS_CORNER,
+              { backgroundColor: theme.accentSoft },
+            ]}
+          >
+            <MapPin size={34} color={theme.accent} strokeWidth={2} />
+          </View>
+
+          <Text style={[TYPOGRAPHY.largeTitle, styles.emptyTitle, { color: theme.text }]}>
+            Вітаємо в «Є Світло»
+          </Text>
+
+          <Text style={[TYPOGRAPHY.body, styles.emptySubtitle, { color: theme.textSecondary }]}>
+            {locationsCount > 0
+              ? 'Оберіть основну адресу у Львівській області, щоб бачити актуальний графік відключень та отримувати сповіщення.'
+              : 'Додайте вашу адресу у Львові або Львівській області, щоб бачити погодинний графік відключень і отримувати нагадування.'}
+          </Text>
+
+          <View style={styles.emptyActions}>
+            <InteractiveSurface
+              onPress={() => router.push('/(tabs)/add')}
+              accessibilityRole="button"
+              rippleTone="accent"
+              borderRadius={RADII.lg}
+              style={[styles.fullWidthAction, elevation.subtle]}
+              contentStyle={[
+                styles.primaryButton,
+                {
+                  backgroundColor: theme.accent,
+                },
+              ]}
+            >
+              <Plus size={19} color={theme.accentOnSolid} strokeWidth={2.4} />
+              <Text style={[TYPOGRAPHY.headline, { color: theme.accentOnSolid }]}>
+                Додати адресу
+              </Text>
+            </InteractiveSurface>
+
+            {locationsCount > 0 ? (
+              <InteractiveSurface
+                onPress={() => setPickerVisible(true)}
+                accessibilityRole="button"
+                borderRadius={RADII.lg}
+                style={styles.fullWidthAction}
+                contentStyle={[
+                  styles.secondaryButton,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <Text style={[TYPOGRAPHY.headline, { color: theme.text }]}>
+                  Обрати зі збережених адрес
+                </Text>
+              </InteractiveSurface>
+            ) : null}
+          </View>
+        </View>
+
+        <LocationPickerModal visible={pickerVisible} onClose={() => setPickerVisible(false)} />
+        <ThemePickerModal
+          visible={themePickerVisible}
+          onClose={() => setThemePickerVisible(false)}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  const formattedDate = activeDaySchedule?.date
+    ? formatUkrainianDateLabel(activeDaySchedule.date)
+    : null;
+  const dayTitle = selectedDay === 'today' ? 'Графік на сьогодні' : 'Графік на завтра';
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.bg }} edges={['top']}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          paddingHorizontal: 14,
-          paddingTop: 8,
-          paddingBottom: 108,
-          gap: 10,
-        }}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -203,63 +279,96 @@ export function HomeDashboard() {
           />
         }
       >
-        <View className="flex-row items-center justify-between gap-2">
-          <Pressable
+        <View style={styles.headerRow}>
+          <InteractiveSurface
             onPress={() => setPickerVisible(true)}
-            className="flex-1 flex-row items-center rounded-2xl border px-3 py-2"
-            style={{ backgroundColor: theme.surface, borderColor: theme.border }}
+            accessibilityRole="button"
+            accessibilityLabel={`Змінити локацію: ${primaryLocation.label || primaryLocation.fullAddress}, Група ${primaryLocation.groupId}`}
+            scaleVariant="card"
+            borderRadius={RADII.lg}
+            style={styles.locationTriggerOuter}
+            contentStyle={styles.locationTriggerInner}
           >
-            <View className="flex-1">
-              <View className="flex-row items-center gap-1.5">
-                <Text className="text-sm font-bold" style={{ color: theme.text }} numberOfLines={1}>
-                  {primaryLocation.label || primaryLocation.fullAddress}
+            <View style={styles.locationTitleRow}>
+              <Text
+                style={[TYPOGRAPHY.title3, styles.locationTitle, { color: theme.text }]}
+                numberOfLines={1}
+              >
+                {primaryLocation.label || primaryLocation.fullAddress}
+              </Text>
+              <ChevronDown size={18} color={theme.textMuted} strokeWidth={2.2} />
+            </View>
+
+            <View style={styles.locationMetaRow}>
+              <View
+                style={[
+                  styles.groupBadge,
+                  CONTINUOUS_CORNER,
+                  { backgroundColor: theme.accentSoft },
+                ]}
+              >
+                <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>
+                  Група {primaryLocation.groupId}
                 </Text>
-                <View
-                  className="rounded-md px-2 py-0.5"
-                  style={{ backgroundColor: theme.accentSoft }}
-                >
-                  <Text className="text-[11px] font-bold" style={{ color: theme.accentText }}>
-                    Група {primaryLocation.groupId}
-                  </Text>
-                </View>
               </View>
+
               {primaryLocation.label ? (
                 <Text
-                  className="mt-0.5 text-xs"
-                  style={{ color: theme.textMuted }}
+                  style={[TYPOGRAPHY.footnote, styles.addressSubtitle, { color: theme.textMuted }]}
                   numberOfLines={1}
                 >
                   {primaryLocation.fullAddress}
                 </Text>
               ) : null}
             </View>
+          </InteractiveSurface>
 
-            <ChevronDown size={17} color={theme.textMuted} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <InteractiveSurface
+              onPress={() => setThemePickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Змінити тему"
+              borderRadius={RADII.pill}
+              style={elevation.subtle}
+              contentStyle={[
+                styles.iconActionButton,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Palette size={19} color={theme.textSecondary} strokeWidth={2} />
+            </InteractiveSurface>
 
-          <Pressable
-            onPress={() => setThemePickerVisible(true)}
-            accessibilityLabel="Змінити тему"
-            className="h-11 w-11 items-center justify-center rounded-2xl border"
-            style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-          >
-            <Palette size={19} color={theme.textSecondary} />
-          </Pressable>
-
-          <Pressable
-            onPress={() => setSettingsVisible(true)}
-            accessibilityLabel="Налаштування сповіщень"
-            className="relative h-11 w-11 items-center justify-center rounded-2xl border"
-            style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-          >
-            <Bell size={19} color={theme.textSecondary} />
-            {reminderMinutes > 0 ? (
-              <View
-                className="absolute right-2 top-2 h-2 w-2 rounded-full"
-                style={{ backgroundColor: theme.accent }}
-              />
-            ) : null}
-          </Pressable>
+            <InteractiveSurface
+              onPress={() => setSettingsVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Налаштування сповіщень"
+              borderRadius={RADII.pill}
+              style={elevation.subtle}
+              contentStyle={[
+                styles.iconActionButton,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
+            >
+              <Bell size={19} color={theme.textSecondary} strokeWidth={2} />
+              {reminderMinutes > 0 ? (
+                <View
+                  style={[
+                    styles.reminderDot,
+                    {
+                      backgroundColor: theme.accent,
+                      borderColor: theme.surface,
+                    },
+                  ]}
+                />
+              ) : null}
+            </InteractiveSurface>
+          </View>
         </View>
 
         <CurrentStatusCard
@@ -267,136 +376,151 @@ export function HomeDashboard() {
           tomorrow={tomorrowSchedule}
           updatedAt={currentSchedule?.updatedAt ?? null}
           isOffline={isOfflineCache}
+          isLoading={isInitialLoading && !currentSchedule}
         />
 
         {fetchError ? (
           <View
-            className="flex-row items-center justify-between rounded-xl border px-3 py-2"
-            style={{ backgroundColor: theme.warningBg, borderColor: theme.warningBorder }}
+            style={[
+              styles.errorBanner,
+              CONTINUOUS_CORNER,
+              {
+                backgroundColor: theme.warningBg,
+                borderColor: theme.warningBorder,
+              },
+            ]}
           >
+            <AlertTriangle size={16} color={theme.warningText} strokeWidth={2.2} />
             <Text
-              className="flex-1 pr-2 text-xs"
-              style={{ color: theme.warningText }}
+              style={[TYPOGRAPHY.footnote, styles.errorText, { color: theme.warningText }]}
               numberOfLines={2}
             >
               {fetchError}
             </Text>
-            <Pressable
+            <InteractiveSurface
               onPress={() => {
                 void loadSchedule('refresh');
               }}
-              className="flex-row items-center gap-1 rounded-lg px-2 py-1"
-              style={{ backgroundColor: theme.surfaceMuted }}
+              accessibilityRole="button"
+              accessibilityLabel="Повторити оновлення"
+              borderRadius={RADII.sm}
+              contentStyle={[
+                styles.retryButton,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.warningBorder,
+                },
+              ]}
             >
-              <RefreshCw size={12} color={theme.warningText} />
-              <Text className="text-xs font-semibold" style={{ color: theme.warningText }}>
-                Ще раз
-              </Text>
-            </Pressable>
+              <RefreshCw size={12} color={theme.warningText} strokeWidth={2.4} />
+              <Text style={[TYPOGRAPHY.caption, { color: theme.warningText }]}>Ще раз</Text>
+            </InteractiveSurface>
           </View>
         ) : null}
 
-        <View className="flex-row rounded-xl p-1" style={{ backgroundColor: theme.segmentTrack }}>
-          <Pressable
-            onPress={() => setSelectedDay('today')}
-            className="flex-1 items-center rounded-lg border py-1.5"
-            style={{
-              backgroundColor: selectedDay === 'today' ? theme.segmentActiveBg : 'transparent',
-              borderColor: selectedDay === 'today' ? theme.segmentActiveBorder : 'transparent',
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: selectedDay === 'today' ? theme.text : theme.textMuted }}
-            >
-              Сьогодні
-            </Text>
-          </Pressable>
+        <SegmentedControl options={dayOptions} value={selectedDay} onChange={setSelectedDay} />
 
-          <Pressable
-            onPress={() => setSelectedDay('tomorrow')}
-            className="flex-1 items-center rounded-lg border py-1.5"
-            style={{
-              backgroundColor: selectedDay === 'tomorrow' ? theme.segmentActiveBg : 'transparent',
-              borderColor: selectedDay === 'tomorrow' ? theme.segmentActiveBorder : 'transparent',
-            }}
-          >
-            <Text
-              className="text-sm font-semibold"
-              style={{ color: selectedDay === 'tomorrow' ? theme.text : theme.textMuted }}
-            >
-              Завтра
-            </Text>
-          </Pressable>
-        </View>
-
-        <View className="flex-row items-center justify-between px-1">
-          <Text className="text-xs font-bold" style={{ color: theme.text }}>
-            {selectedDay === 'today' ? 'Графік на сьогодні' : 'Графік на завтра'}
-            {activeDaySchedule?.date
-              ? ` (${formatUkrainianDateLabel(activeDaySchedule.date)})`
-              : ''}
-          </Text>
+        <Animated.View
+          style={{
+            opacity: dayTransition,
+            transform: [
+              {
+                translateY: dayTransition.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [6, 0],
+                }),
+              },
+            ],
+          }}
+        >
           {isInitialLoading && !currentSchedule ? (
-            <ActivityIndicator size="small" color={theme.accent} />
-          ) : hasActiveSchedule ? (
-            <Text className="text-[11px]" style={{ color: theme.textMuted }}>
-              Натисніть на годину для деталей
-            </Text>
-          ) : null}
-        </View>
-
-        {hasActiveSchedule && activeDaySchedule ? (
-          <View key={`grid-${selectedDay}`}>
-            <OutageGrid
-              slots={activeDaySchedule.slots}
-              highlightCurrentHour={selectedDay === 'today'}
-            />
-          </View>
-        ) : selectedDay === 'tomorrow' ? (
-          <View
-            key="tomorrow-empty"
-            className="items-center rounded-2xl border px-6 py-8"
-            style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-          >
             <View
-              className="h-12 w-12 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: theme.surfaceMuted }}
+              style={[
+                styles.stateCard,
+                CONTINUOUS_CORNER,
+                elevation.card,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
             >
-              <CalendarClock size={24} color={theme.textMuted} />
+              <ActivityIndicator size="small" color={theme.accent} />
+              <Text style={[TYPOGRAPHY.callout, styles.loadingLabel, { color: theme.textMuted }]}>
+                Завантаження погодинного графіка…
+              </Text>
             </View>
-            <Text className="mt-3 text-center text-base font-bold" style={{ color: theme.text }}>
-              Графік на завтра буде пізніше
-            </Text>
-            <Text
-              className="mt-1.5 text-center text-xs leading-5"
-              style={{ color: theme.textMuted }}
-            >
-              Львівобленерго ще не опублікувало графік на наступну добу. Потягніть вниз для
-              перевірки або дочекайтесь сповіщення.
-            </Text>
-          </View>
-        ) : (
-          <View
-            key="today-no-schedule"
-            className="items-center rounded-2xl border px-6 py-8"
-            style={{ backgroundColor: theme.onBg, borderColor: theme.onBorder }}
-          >
+          ) : hasActiveSchedule && activeDaySchedule ? (
+            <View key={`grid-${selectedDay}`}>
+              <OutageGrid
+                slots={activeDaySchedule.slots}
+                highlightCurrentHour={selectedDay === 'today'}
+                dayTitle={dayTitle}
+                dateLabel={formattedDate}
+              />
+            </View>
+          ) : selectedDay === 'tomorrow' ? (
             <View
-              className="h-12 w-12 items-center justify-center rounded-2xl"
-              style={{ backgroundColor: theme.onHalfBg }}
+              key="tomorrow-empty"
+              style={[
+                styles.stateCard,
+                CONTINUOUS_CORNER,
+                elevation.card,
+                {
+                  backgroundColor: theme.surface,
+                  borderColor: theme.border,
+                },
+              ]}
             >
-              <Zap size={24} color={theme.onIcon} />
+              <View
+                style={[
+                  styles.stateIconWrap,
+                  CONTINUOUS_CORNER,
+                  { backgroundColor: theme.surfaceMuted },
+                ]}
+              >
+                <CalendarClock size={24} color={theme.textMuted} strokeWidth={2} />
+              </View>
+              <Text style={[TYPOGRAPHY.headline, styles.stateTitle, { color: theme.text }]}>
+                Графік на завтра буде пізніше
+              </Text>
+              <Text style={[TYPOGRAPHY.subhead, styles.stateBody, { color: theme.textMuted }]}>
+                Львівобленерго ще не опублікувало графік на наступну добу. Потягніть вниз для
+                перевірки або дочекайтесь сповіщення.
+              </Text>
             </View>
-            <Text className="mt-3 text-center text-lg font-bold" style={{ color: theme.onText }}>
-              Є світло
-            </Text>
-            <Text className="mt-1 text-center text-xs leading-5" style={{ color: theme.onText }}>
-              Графік відключень на сьогодні наразі відсутній — електроенергія подається без
-              обмежень.
-            </Text>
-          </View>
-        )}
+          ) : (
+            <View
+              key="today-no-schedule"
+              style={[
+                styles.stateCard,
+                CONTINUOUS_CORNER,
+                elevation.card,
+                {
+                  backgroundColor: theme.onBg,
+                  borderColor: theme.onBorder,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.stateIconWrap,
+                  CONTINUOUS_CORNER,
+                  { backgroundColor: theme.onHalfBg },
+                ]}
+              >
+                <Zap size={24} color={theme.onIcon} strokeWidth={2.2} />
+              </View>
+              <Text style={[TYPOGRAPHY.title3, styles.stateTitle, { color: theme.onText }]}>
+                Є світло
+              </Text>
+              <Text style={[TYPOGRAPHY.subhead, styles.stateBody, { color: theme.onText }]}>
+                Графік відключень на сьогодні наразі відсутній — електроенергія подається без
+                обмежень.
+              </Text>
+            </View>
+          )}
+        </Animated.View>
       </ScrollView>
 
       <LocationPickerModal visible={pickerVisible} onClose={() => setPickerVisible(false)} />
@@ -410,3 +534,181 @@ export function HomeDashboard() {
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.xs,
+    paddingBottom: LAYOUT.tabBarClearance,
+    gap: SPACING.sm + 2,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    minHeight: 52,
+  },
+  locationTriggerOuter: {
+    flex: 1,
+  },
+  locationTriggerInner: {
+    paddingVertical: SPACING.xxs,
+    paddingRight: SPACING.xs,
+    borderRadius: RADII.md,
+  },
+  locationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  locationTitle: {
+    flexShrink: 1,
+  },
+  locationMetaRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  groupBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: RADII.pill,
+  },
+  addressSubtitle: {
+    flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  iconActionButton: {
+    width: LAYOUT.iconButtonVisualSize,
+    height: LAYOUT.iconButtonVisualSize,
+    borderRadius: RADII.pill,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  reminderDot: {
+    position: 'absolute',
+    top: 9,
+    right: 9,
+    width: 9,
+    height: 9,
+    borderRadius: RADII.pill,
+    borderWidth: 1.5,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 10,
+  },
+  errorText: {
+    flex: 1,
+    lineHeight: 17,
+  },
+  retryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: RADII.sm,
+    borderWidth: LAYOUT.borderWidth,
+  },
+  stateCard: {
+    alignItems: 'center',
+    borderRadius: RADII.xl,
+    borderWidth: LAYOUT.borderWidth,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.xxl,
+  },
+  stateIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: RADII.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stateTitle: {
+    marginTop: SPACING.sm + 2,
+    textAlign: 'center',
+  },
+  stateBody: {
+    marginTop: 6,
+    textAlign: 'center',
+    opacity: 0.88,
+  },
+  loadingLabel: {
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  emptyTopBar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.xs,
+  },
+  emptyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: 96,
+  },
+  emptyIconBadge: {
+    width: 76,
+    height: 76,
+    borderRadius: RADII.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    marginTop: SPACING.lg,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    marginTop: SPACING.xs + 2,
+    textAlign: 'center',
+  },
+  emptyActions: {
+    marginTop: SPACING.xl + 4,
+    width: '100%',
+    maxWidth: 320,
+    gap: SPACING.sm,
+  },
+  fullWidthAction: {
+    width: '100%',
+  },
+  primaryButton: {
+    minHeight: 52,
+    borderRadius: RADII.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
+  },
+  secondaryButton: {
+    minHeight: 50,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+});

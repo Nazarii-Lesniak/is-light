@@ -1,19 +1,30 @@
 import { useAppTheme } from '@/entities/location/model/store';
 import {
+  CONTINUOUS_CORNER,
+  LAYOUT,
+  RADII,
+  SPACING,
+  TABULAR_NUMS,
+  TYPOGRAPHY,
+  getElevation,
+  getInteractiveTokens,
+} from '@/shared/theme/tokens';
+import {
   type DaySchedule,
   formatCountdownUk,
   formatKyivTime,
   getCurrentPowerStatus,
 } from '@is-light/shared';
 import { Clock, HelpCircle, WifiOff, Zap, ZapOff } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 
 interface CurrentStatusCardProps {
   today: DaySchedule | null;
   tomorrow: DaySchedule | null;
   updatedAt: string | null;
   isOffline: boolean;
+  isLoading?: boolean;
 }
 
 export function CurrentStatusCard({
@@ -21,9 +32,15 @@ export function CurrentStatusCard({
   tomorrow,
   updatedAt,
   isOffline,
+  isLoading = false,
 }: CurrentStatusCardProps) {
   const theme = useAppTheme();
+  const elevation = getElevation(theme);
+  const interactive = getInteractiveTokens(theme);
   const [now, setNow] = useState(() => new Date());
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const skeletonAnim = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -32,10 +49,112 @@ export function CurrentStatusCard({
     return () => clearInterval(interval);
   }, []);
 
+  const showSkeleton = isLoading && !today;
+
+  useEffect(() => {
+    if (!showSkeleton) {
+      skeletonAnim.setValue(1);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonAnim, {
+          toValue: 0.9,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonAnim, {
+          toValue: 0.4,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [showSkeleton, skeletonAnim]);
+
   const summary = getCurrentPowerStatus(today, tomorrow, now);
   const hasPublishedToday = Boolean(today?.isPublished);
   const isOff = summary.status === 'off';
   const isUnknownWithSchedule = hasPublishedToday && summary.status === 'unknown';
+  const isLiveKnown = hasPublishedToday && !isUnknownWithSchedule;
+
+  useEffect(() => {
+    if (!isLiveKnown || showSkeleton) {
+      pulseAnim.setValue(1);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.35,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [isLiveKnown, showSkeleton, pulseAnim]);
+
+  if (showSkeleton) {
+    return (
+      <View
+        style={[
+          styles.card,
+          CONTINUOUS_CORNER,
+          elevation.card,
+          {
+            backgroundColor: theme.surface,
+            borderColor: theme.border,
+          },
+        ]}
+      >
+        <View style={styles.topRow}>
+          <Animated.View
+            style={[
+              styles.skeletonPill,
+              { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
+            ]}
+          />
+          <Animated.View
+            style={[
+              styles.iconEmblem,
+              CONTINUOUS_CORNER,
+              { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
+            ]}
+          />
+        </View>
+
+        <Animated.View
+          style={[
+            styles.skeletonSubline,
+            { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.skeletonHero,
+            { backgroundColor: interactive.skeletonBase, opacity: skeletonAnim },
+          ]}
+        />
+
+        <View style={[styles.footer, { borderTopColor: interactive.divider }]}>
+          <Text style={[TYPOGRAPHY.footnote, { color: theme.textMuted }]}>
+            Оновлюємо актуальний графік…
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   const bgColor = isOff ? theme.offBg : isUnknownWithSchedule ? theme.unknownBg : theme.onBg;
   const borderColor = isOff
@@ -59,7 +178,7 @@ export function CurrentStatusCard({
       ? theme.unknownText
       : theme.onText;
 
-  const titleText = isOff
+  const statusBadgeLabel = isOff
     ? 'Зараз немає світла'
     : isUnknownWithSchedule
       ? 'Немає актуальних даних'
@@ -67,72 +186,141 @@ export function CurrentStatusCard({
         ? 'Зараз є світло'
         : 'Є світло';
 
-  let countdownText = 'До кінця доступного графіка змін не заплановано';
+  const hasCountdown =
+    hasPublishedToday &&
+    !isUnknownWithSchedule &&
+    summary.nextChangeAt !== null &&
+    summary.msUntilChange !== null;
+
+  const nextActionKicker =
+    hasCountdown && summary.nextChangeAt
+      ? `${summary.nextStatus === 'off' ? 'Відключення' : 'Увімкнення'} о ${formatKyivTime(
+          summary.nextChangeAt,
+        )}`
+      : null;
+
+  const countdownHeroValue =
+    hasCountdown && summary.msUntilChange !== null
+      ? `через ${formatCountdownUk(summary.msUntilChange)}`
+      : null;
+
+  let fallbackDescription = 'До кінця доступного графіка змін не заплановано';
   if (!hasPublishedToday) {
-    countdownText = 'Графік відключень на сьогодні не застосовується';
+    fallbackDescription = 'Графік відключень на сьогодні не застосовується';
   } else if (isUnknownWithSchedule) {
-    countdownText = 'Потягніть вниз, щоб оновити графік на поточну добу';
-  } else if (summary.nextChangeAt && summary.msUntilChange !== null) {
-    const actionLabel = summary.nextStatus === 'off' ? 'Відключення' : 'Увімкнення';
-    const timeLabel = formatKyivTime(summary.nextChangeAt);
-    countdownText = `${actionLabel} о ${timeLabel} (через ${formatCountdownUk(summary.msUntilChange)})`;
+    fallbackDescription = 'Потягніть вниз, щоб оновити графік на поточну добу';
   }
 
   return (
     <View
-      className="rounded-2xl border p-3"
-      style={{
-        backgroundColor: bgColor,
-        borderColor,
-      }}
+      accessibilityRole="summary"
+      style={[
+        styles.card,
+        CONTINUOUS_CORNER,
+        elevation.card,
+        {
+          backgroundColor: bgColor,
+          borderColor,
+        },
+      ]}
     >
-      <View className="flex-row items-center gap-2.5">
+      <View style={styles.topRow}>
         <View
-          className="h-10 w-10 items-center justify-center rounded-xl"
-          style={{ backgroundColor: iconBgColor }}
+          style={[
+            styles.statusPill,
+            CONTINUOUS_CORNER,
+            {
+              backgroundColor: iconBgColor,
+            },
+          ]}
         >
-          {isOff ? (
-            <ZapOff size={20} color={iconColor} />
-          ) : isUnknownWithSchedule ? (
-            <HelpCircle size={20} color={iconColor} />
-          ) : (
-            <Zap size={20} color={iconColor} />
-          )}
+          <Animated.View
+            style={[
+              styles.liveDot,
+              {
+                backgroundColor: iconColor,
+                opacity: isLiveKnown ? pulseAnim : 0.75,
+              },
+            ]}
+          />
+          <Text style={[TYPOGRAPHY.subhead, styles.statusPillText, { color: textColor }]}>
+            {statusBadgeLabel}
+          </Text>
         </View>
 
-        <View className="flex-1">
-          <Text className="text-base font-bold" style={{ color: textColor }}>
-            {titleText}
-          </Text>
-          <View className="mt-0.5 flex-row items-center gap-1">
-            <Clock size={13} color={iconColor} />
-            <Text className="flex-1 text-xs" style={{ color: textColor }} numberOfLines={1}>
-              {countdownText}
-            </Text>
-          </View>
+        <View
+          style={[
+            styles.iconEmblem,
+            CONTINUOUS_CORNER,
+            {
+              backgroundColor: iconBgColor,
+            },
+          ]}
+        >
+          {isOff ? (
+            <ZapOff size={21} color={iconColor} strokeWidth={2.2} />
+          ) : isUnknownWithSchedule ? (
+            <HelpCircle size={21} color={iconColor} strokeWidth={2.2} />
+          ) : (
+            <Zap size={21} color={iconColor} strokeWidth={2.2} />
+          )}
         </View>
       </View>
 
+      <View style={styles.body}>
+        {hasCountdown && nextActionKicker && countdownHeroValue ? (
+          <>
+            <View style={styles.kickerRow}>
+              <Clock size={14} color={iconColor} strokeWidth={2} />
+              <Text style={[TYPOGRAPHY.callout, TABULAR_NUMS, { color: textColor, opacity: 0.88 }]}>
+                {nextActionKicker}
+              </Text>
+            </View>
+            <Text style={[TYPOGRAPHY.metricHero, styles.heroText, { color: textColor }]}>
+              {countdownHeroValue}
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={[TYPOGRAPHY.title2, { color: textColor }]}>{statusBadgeLabel}</Text>
+            <Text style={[TYPOGRAPHY.callout, styles.fallbackDesc, { color: textColor }]}>
+              {fallbackDescription}
+            </Text>
+          </>
+        )}
+      </View>
+
       <View
-        className="mt-2 flex-row flex-wrap items-center justify-between gap-2 pt-1.5"
-        style={{ borderTopWidth: 1, borderTopColor: borderColor }}
+        style={[
+          styles.footer,
+          {
+            borderTopColor: borderColor,
+          },
+        ]}
       >
-        <Text className="text-[11px]" style={{ color: theme.textSecondary }}>
+        <Text style={[TYPOGRAPHY.footnote, TABULAR_NUMS, { color: theme.textSecondary }]}>
           {updatedAt ? `Оновлено о ${formatKyivTime(updatedAt)}` : 'Ще не синхронізовано'}
         </Text>
 
         {isOffline ? (
           <View
-            className="flex-row items-center gap-1 rounded-full px-2 py-0.5"
-            style={{ backgroundColor: theme.warningBg }}
+            style={[
+              styles.offlinePill,
+              CONTINUOUS_CORNER,
+              {
+                backgroundColor: theme.warningBg,
+                borderColor: theme.warningBorder,
+              },
+            ]}
           >
             <WifiOff size={11} color={theme.warningText} />
-            <Text className="text-[11px] font-medium" style={{ color: theme.warningText }}>
-              Офлайн-кеш
-            </Text>
+            <Text style={[TYPOGRAPHY.caption, { color: theme.warningText }]}>Офлайн-кеш</Text>
           </View>
         ) : today?.sourceInfo ? (
-          <Text className="text-[11px]" style={{ color: theme.textMuted }} numberOfLines={1}>
+          <Text
+            style={[TYPOGRAPHY.footnote, styles.sourceInfo, { color: theme.textMuted }]}
+            numberOfLines={1}
+          >
             {today.sourceInfo}
           </Text>
         ) : null}
@@ -140,3 +328,94 @@ export function CurrentStatusCard({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    borderRadius: RADII.xl,
+    borderWidth: LAYOUT.borderWidth,
+    padding: LAYOUT.cardPadding,
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: RADII.pill,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: RADII.pill,
+  },
+  statusPillText: {
+    fontWeight: '600',
+  },
+  iconEmblem: {
+    width: 42,
+    height: 42,
+    borderRadius: RADII.md + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  body: {
+    marginTop: SPACING.sm + 2,
+  },
+  kickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroText: {
+    marginTop: SPACING.xxs,
+  },
+  fallbackDesc: {
+    marginTop: SPACING.xxs + 2,
+    opacity: 0.85,
+  },
+  footer: {
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: LAYOUT.borderWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+  },
+  offlinePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: RADII.pill,
+    borderWidth: LAYOUT.borderWidth,
+  },
+  sourceInfo: {
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  skeletonPill: {
+    width: 152,
+    height: 30,
+    borderRadius: RADII.pill,
+  },
+  skeletonSubline: {
+    marginTop: SPACING.md,
+    width: 180,
+    height: 16,
+    borderRadius: RADII.xs,
+  },
+  skeletonHero: {
+    marginTop: SPACING.xs,
+    width: 220,
+    height: 30,
+    borderRadius: RADII.sm,
+  },
+});
