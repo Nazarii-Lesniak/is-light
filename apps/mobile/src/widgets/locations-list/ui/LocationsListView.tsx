@@ -1,19 +1,21 @@
 import { useAppStore, useAppTheme } from '@/entities/location/model/store';
 import type { SavedLocation } from '@/entities/location/model/types';
-import { useRouter } from 'expo-router';
-import { Check, MapPin, Pencil, Plus, Star, Trash2, X } from 'lucide-react-native';
-import { useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+  CONTINUOUS_CORNER,
+  LAYOUT,
+  RADII,
+  SPACING,
+  TABULAR_NUMS,
+  TYPOGRAPHY,
+  getElevation,
+  getInteractiveTokens,
+} from '@/shared/theme/tokens';
+import { AppBottomSheet } from '@/shared/ui/AppBottomSheet';
+import { InteractiveSurface } from '@/shared/ui/InteractiveSurface';
+import { useRouter } from 'expo-router';
+import { ArrowRight, Check, MapPin, Pencil, Plus, Star, Trash2 } from 'lucide-react-native';
+import { useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const LABEL_PRESETS = ['Дім', 'Робота', 'Батьки', 'Офіс'] as const;
@@ -36,6 +38,8 @@ function getUkrainianLocationWord(count: number): string {
 export function LocationsListView() {
   const router = useRouter();
   const theme = useAppTheme();
+  const elevation = getElevation(theme);
+  const interactive = getInteractiveTokens(theme);
   const locations = useAppStore((s) => s.locations);
   const primaryLocationId = useAppStore((s) => s.primaryLocationId);
   const setPrimaryLocation = useAppStore((s) => s.setPrimaryLocation);
@@ -44,10 +48,17 @@ export function LocationsListView() {
 
   const [editingLocation, setEditingLocation] = useState<SavedLocation | null>(null);
   const [labelDraft, setLabelDraft] = useState('');
+  const [isLabelFocused, setIsLabelFocused] = useState(false);
 
   const handleOpenEdit = (location: SavedLocation) => {
     setEditingLocation(location);
     setLabelDraft(location.label ?? '');
+  };
+
+  const handleCloseEdit = () => {
+    setEditingLocation(null);
+    setLabelDraft('');
+    setIsLabelFocused(false);
   };
 
   const handleSaveLabel = () => {
@@ -55,8 +66,7 @@ export function LocationsListView() {
       return;
     }
     updateLocationLabel(editingLocation.id, labelDraft);
-    setEditingLocation(null);
-    setLabelDraft('');
+    handleCloseEdit();
   };
 
   const handleDeletePress = (location: SavedLocation) => {
@@ -89,45 +99,65 @@ export function LocationsListView() {
   const locationWord = getUkrainianLocationWord(locations.length);
 
   return (
-    <SafeAreaView className="flex-1" style={{ backgroundColor: theme.bg }} edges={['top']}>
-      <View className="px-4 pb-3 pt-3">
-        <Text className="text-2xl font-bold" style={{ color: theme.text }}>
-          Збережені адреси
-        </Text>
-        <Text className="mt-0.5 text-xs" style={{ color: theme.textMuted }}>
-          Львівська область • {locations.length} {locationWord}
-        </Text>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
+      <View style={styles.header}>
+        <View style={styles.headerTitleWrap}>
+          <Text style={[TYPOGRAPHY.largeTitle, { color: theme.text }]}>Збережені адреси</Text>
+          <Text
+            style={[TYPOGRAPHY.subhead, TABULAR_NUMS, styles.subtitle, { color: theme.textMuted }]}
+          >
+            Львівська область · {locations.length} {locationWord}
+          </Text>
+        </View>
+
+        <InteractiveSurface
+          onPress={() => router.push('/(tabs)/add')}
+          accessibilityRole="button"
+          accessibilityLabel="Додати нову адресу"
+          rippleTone="accent"
+          borderRadius={RADII.pill}
+          style={elevation.subtle}
+          contentStyle={[styles.addCircleButton, { backgroundColor: theme.accent }]}
+        >
+          <Plus size={20} color={theme.accentOnSolid} strokeWidth={2.4} />
+        </InteractiveSurface>
       </View>
 
       {locations.length === 0 ? (
-        <View className="flex-1 items-center justify-center px-8 pb-24">
+        <View style={styles.emptyWrap}>
           <View
-            className="h-16 w-16 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: theme.surfaceMuted }}
+            style={[
+              styles.emptyIconBadge,
+              CONTINUOUS_CORNER,
+              { backgroundColor: theme.surfaceMuted },
+            ]}
           >
-            <MapPin size={30} color={theme.textMuted} />
+            <MapPin size={30} color={theme.textMuted} strokeWidth={2} />
           </View>
-          <Text className="mt-4 text-center text-lg font-bold" style={{ color: theme.text }}>
+          <Text style={[TYPOGRAPHY.title2, styles.emptyTitle, { color: theme.text }]}>
             Список адрес порожній
           </Text>
-          <Text className="mt-1.5 text-center text-sm leading-5" style={{ color: theme.textMuted }}>
+          <Text style={[TYPOGRAPHY.body, styles.emptyBody, { color: theme.textSecondary }]}>
             Додайте одну або кілька адрес у Львові чи області, щоб швидко перемикатись між ними.
           </Text>
-          <Pressable
+          <InteractiveSurface
             onPress={() => router.push('/(tabs)/add')}
-            className="mt-6 flex-row items-center gap-2 rounded-2xl px-5 py-3.5"
-            style={{ backgroundColor: theme.accent }}
+            accessibilityRole="button"
+            rippleTone="accent"
+            borderRadius={RADII.lg}
+            style={[styles.emptyCtaOuter, elevation.subtle]}
+            contentStyle={[styles.emptyCtaButton, { backgroundColor: theme.accent }]}
           >
-            <Plus size={18} color={theme.accentOnSolid} />
-            <Text className="text-sm font-semibold" style={{ color: theme.accentOnSolid }}>
+            <Plus size={19} color={theme.accentOnSolid} strokeWidth={2.4} />
+            <Text style={[TYPOGRAPHY.headline, { color: theme.accentOnSolid }]}>
               Додати першу адресу
             </Text>
-          </Pressable>
+          </InteractiveSurface>
         </View>
       ) : (
         <ScrollView
-          className="flex-1 px-4"
-          contentContainerStyle={{ gap: 12, paddingTop: 4, paddingBottom: 112 }}
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {locations.map((location) => {
@@ -136,96 +166,140 @@ export function LocationsListView() {
             return (
               <View
                 key={location.id}
-                className="rounded-2xl border p-4"
-                style={{
-                  backgroundColor: theme.surface,
-                  borderColor: isPrimary ? theme.accent : theme.border,
-                }}
+                style={[
+                  styles.card,
+                  CONTINUOUS_CORNER,
+                  elevation.card,
+                  {
+                    backgroundColor: theme.surface,
+                    borderColor: isPrimary ? theme.accent : theme.border,
+                    borderWidth: isPrimary ? 1.5 : LAYOUT.borderWidth,
+                  },
+                ]}
               >
-                <View className="flex-row items-start justify-between gap-2">
-                  <View className="flex-1">
-                    <View className="flex-row flex-wrap items-center gap-2">
-                      {location.label ? (
-                        <Text className="text-base font-bold" style={{ color: theme.text }}>
-                          {location.label}
-                        </Text>
-                      ) : null}
-
-                      <View
-                        className="rounded-lg px-2 py-0.5"
-                        style={{ backgroundColor: theme.accentSoft }}
-                      >
-                        <Text className="text-xs font-bold" style={{ color: theme.accentText }}>
-                          Група {location.groupId}
-                        </Text>
-                      </View>
-
-                      {isPrimary ? (
-                        <View
-                          className="flex-row items-center gap-1 rounded-lg px-2 py-0.5"
-                          style={{ backgroundColor: theme.onHalfBg }}
-                        >
-                          <Star size={11} color={theme.onIcon} fill={theme.onIcon} />
-                          <Text className="text-xs font-bold" style={{ color: theme.onText }}>
-                            Основна
-                          </Text>
-                        </View>
-                      ) : null}
+                <View style={styles.cardTop}>
+                  <View style={styles.badgesRow}>
+                    <View
+                      style={[
+                        styles.groupPill,
+                        CONTINUOUS_CORNER,
+                        { backgroundColor: theme.accentSoft },
+                      ]}
+                    >
+                      <Text style={[TYPOGRAPHY.caption, { color: theme.accentText }]}>
+                        Група {location.groupId}
+                      </Text>
                     </View>
 
-                    <Text className="mt-1.5 text-sm" style={{ color: theme.textSecondary }}>
-                      {location.fullAddress}
-                    </Text>
+                    {isPrimary ? (
+                      <View
+                        style={[
+                          styles.primaryPill,
+                          CONTINUOUS_CORNER,
+                          { backgroundColor: theme.onHalfBg },
+                        ]}
+                      >
+                        <Star size={11} color={theme.onIcon} fill={theme.onIcon} />
+                        <Text style={[TYPOGRAPHY.caption, { color: theme.onText }]}>Основна</Text>
+                      </View>
+                    ) : null}
                   </View>
+
+                  {location.label ? (
+                    <Text style={[TYPOGRAPHY.title3, styles.cardLabel, { color: theme.text }]}>
+                      {location.label}
+                    </Text>
+                  ) : null}
+
+                  <Text
+                    style={[
+                      location.label ? TYPOGRAPHY.callout : TYPOGRAPHY.headline,
+                      styles.cardAddress,
+                      { color: location.label ? theme.textSecondary : theme.text },
+                    ]}
+                  >
+                    {location.fullAddress}
+                  </Text>
                 </View>
 
-                <View
-                  className="mt-3.5 flex-row items-center gap-2 pt-3"
-                  style={{ borderTopWidth: 1, borderTopColor: theme.borderSubtle }}
-                >
+                <View style={[styles.cardActions, { borderTopColor: interactive.divider }]}>
                   {!isPrimary ? (
-                    <Pressable
+                    <InteractiveSurface
                       onPress={() => setPrimaryLocation(location.id)}
-                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl py-2.5"
-                      style={{ backgroundColor: theme.accentSoft }}
+                      accessibilityRole="button"
+                      borderRadius={RADII.md}
+                      style={styles.mainActionOuter}
+                      contentStyle={[
+                        styles.mainActionButton,
+                        { backgroundColor: theme.accentSoft },
+                      ]}
                     >
-                      <Check size={15} color={theme.accent} />
-                      <Text className="text-xs font-semibold" style={{ color: theme.accentText }}>
+                      <Check size={16} color={theme.accent} strokeWidth={2.4} />
+                      <Text
+                        style={[
+                          TYPOGRAPHY.callout,
+                          styles.mainActionText,
+                          { color: theme.accentText },
+                        ]}
+                      >
                         Зробити основною
                       </Text>
-                    </Pressable>
+                    </InteractiveSurface>
                   ) : (
-                    <Pressable
+                    <InteractiveSurface
                       onPress={() => router.push('/(tabs)')}
-                      className="flex-1 items-center justify-center rounded-xl py-2.5"
-                      style={{ backgroundColor: theme.surfaceMuted }}
+                      accessibilityRole="button"
+                      borderRadius={RADII.md}
+                      style={styles.mainActionOuter}
+                      contentStyle={[
+                        styles.mainActionButton,
+                        { backgroundColor: theme.surfaceMuted },
+                      ]}
                     >
                       <Text
-                        className="text-xs font-semibold"
-                        style={{ color: theme.textSecondary }}
+                        style={[
+                          TYPOGRAPHY.callout,
+                          styles.mainActionText,
+                          { color: theme.textSecondary },
+                        ]}
                       >
                         Відкрити графік
                       </Text>
-                    </Pressable>
+                      <ArrowRight size={15} color={theme.textSecondary} strokeWidth={2.2} />
+                    </InteractiveSurface>
                   )}
 
-                  <Pressable
+                  <InteractiveSurface
                     onPress={() => handleOpenEdit(location)}
+                    accessibilityRole="button"
                     accessibilityLabel="Редагувати мітку"
-                    className="h-10 w-10 items-center justify-center rounded-xl border"
-                    style={{ backgroundColor: theme.surfaceInput, borderColor: theme.border }}
+                    borderRadius={RADII.md}
+                    contentStyle={[
+                      styles.iconButton,
+                      {
+                        backgroundColor: theme.surfaceInput,
+                        borderColor: theme.border,
+                      },
+                    ]}
                   >
-                    <Pencil size={16} color={theme.textSecondary} />
-                  </Pressable>
+                    <Pencil size={16} color={theme.textSecondary} strokeWidth={2} />
+                  </InteractiveSurface>
 
-                  <Pressable
+                  <InteractiveSurface
                     onPress={() => handleDeletePress(location)}
+                    accessibilityRole="button"
                     accessibilityLabel="Видалити адресу"
-                    className="h-10 w-10 items-center justify-center rounded-xl border"
-                    style={{ backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }}
+                    borderRadius={RADII.md}
+                    contentStyle={[
+                      styles.iconButton,
+                      {
+                        backgroundColor: theme.dangerBg,
+                        borderColor: theme.dangerBorder,
+                      },
+                    ]}
                   >
-                    <Trash2 size={16} color={theme.dangerText} />
-                  </Pressable>
+                    <Trash2 size={16} color={theme.dangerText} strokeWidth={2} />
+                  </InteractiveSurface>
                 </View>
               </View>
             );
@@ -233,105 +307,276 @@ export function LocationsListView() {
         </ScrollView>
       )}
 
-      <Modal
+      <AppBottomSheet
         visible={editingLocation !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setEditingLocation(null)}
+        onClose={handleCloseEdit}
+        title="Мітка локації"
+        subtitle={editingLocation?.fullAddress}
+        avoidKeyboard
       >
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <Pressable
-            className="flex-1 items-center justify-center bg-black/50 px-5"
-            onPress={() => setEditingLocation(null)}
-          >
-            <Pressable
-              className="w-full rounded-3xl border p-5"
-              style={{ backgroundColor: theme.surface, borderColor: theme.border }}
-              onPress={(e) => e.stopPropagation()}
-            >
-              <View className="flex-row items-center justify-between">
-                <Text className="text-lg font-bold" style={{ color: theme.text }}>
-                  Мітка локації
+        <TextInput
+          value={labelDraft}
+          onChangeText={setLabelDraft}
+          onFocus={() => setIsLabelFocused(true)}
+          onBlur={() => setIsLabelFocused(false)}
+          placeholder="Наприклад: Дім, Робота, Батьки"
+          placeholderTextColor={theme.textMuted}
+          maxLength={32}
+          autoFocus
+          style={[
+            TYPOGRAPHY.body,
+            CONTINUOUS_CORNER,
+            styles.labelInput,
+            {
+              backgroundColor: theme.surfaceInput,
+              borderColor: isLabelFocused ? theme.accent : theme.border,
+              borderWidth: isLabelFocused ? 1.5 : LAYOUT.borderWidth,
+              color: theme.text,
+            },
+          ]}
+        />
+
+        <View style={styles.presetsWrap}>
+          {LABEL_PRESETS.map((preset) => {
+            const active = labelDraft === preset;
+            return (
+              <InteractiveSurface
+                key={preset}
+                onPress={() => setLabelDraft(preset)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                borderRadius={RADII.pill}
+                contentStyle={[
+                  styles.presetChip,
+                  {
+                    backgroundColor: active ? theme.accentSoft : theme.surfaceInput,
+                    borderColor: active ? theme.accent : theme.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    TYPOGRAPHY.subhead,
+                    {
+                      color: active ? theme.accentText : theme.textSecondary,
+                      fontWeight: active ? '600' : '500',
+                    },
+                  ]}
+                >
+                  {preset}
                 </Text>
-                <Pressable
-                  onPress={() => setEditingLocation(null)}
-                  className="h-8 w-8 items-center justify-center rounded-full"
-                  style={{ backgroundColor: theme.surfaceMuted }}
-                >
-                  <X size={16} color={theme.textSecondary} />
-                </Pressable>
-              </View>
+              </InteractiveSurface>
+            );
+          })}
+        </View>
 
-              <Text className="mt-1 text-xs" style={{ color: theme.textMuted }}>
-                {editingLocation?.fullAddress}
-              </Text>
+        <View style={styles.sheetActions}>
+          <InteractiveSurface
+            onPress={handleCloseEdit}
+            accessibilityRole="button"
+            borderRadius={RADII.lg}
+            style={styles.sheetActionFlex}
+            contentStyle={[
+              styles.sheetSecondaryBtn,
+              {
+                borderColor: theme.border,
+                backgroundColor: theme.surfaceInput,
+              },
+            ]}
+          >
+            <Text style={[TYPOGRAPHY.headline, { color: theme.textSecondary }]}>Скасувати</Text>
+          </InteractiveSurface>
 
-              <TextInput
-                value={labelDraft}
-                onChangeText={setLabelDraft}
-                placeholder="Наприклад: Дім, Робота, Батьки"
-                placeholderTextColor={theme.textMuted}
-                maxLength={32}
-                autoFocus
-                className="mt-3.5 rounded-xl border px-3.5 py-3 text-base"
-                style={{
-                  backgroundColor: theme.surfaceInput,
-                  borderColor: theme.border,
-                  color: theme.text,
-                }}
-              />
-
-              <View className="mt-3 flex-row flex-wrap gap-2">
-                {LABEL_PRESETS.map((preset) => (
-                  <Pressable
-                    key={preset}
-                    onPress={() => setLabelDraft(preset)}
-                    className="rounded-lg border px-3 py-1.5"
-                    style={{
-                      backgroundColor:
-                        labelDraft === preset ? theme.accentSoft : theme.surfaceInput,
-                      borderColor: labelDraft === preset ? theme.accent : theme.border,
-                    }}
-                  >
-                    <Text
-                      className="text-xs font-medium"
-                      style={{
-                        color: labelDraft === preset ? theme.accentText : theme.textSecondary,
-                      }}
-                    >
-                      {preset}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              <View className="mt-5 flex-row gap-2.5">
-                <Pressable
-                  onPress={() => setEditingLocation(null)}
-                  className="flex-1 items-center rounded-xl border py-3"
-                  style={{ borderColor: theme.border, backgroundColor: theme.surfaceInput }}
-                >
-                  <Text className="text-sm font-semibold" style={{ color: theme.textSecondary }}>
-                    Скасувати
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleSaveLabel}
-                  className="flex-1 items-center rounded-xl py-3"
-                  style={{ backgroundColor: theme.accent }}
-                >
-                  <Text className="text-sm font-semibold" style={{ color: theme.accentOnSolid }}>
-                    Зберегти
-                  </Text>
-                </Pressable>
-              </View>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+          <InteractiveSurface
+            onPress={handleSaveLabel}
+            accessibilityRole="button"
+            rippleTone="accent"
+            borderRadius={RADII.lg}
+            style={styles.sheetActionFlex}
+            contentStyle={[styles.sheetPrimaryBtn, { backgroundColor: theme.accent }]}
+          >
+            <Text style={[TYPOGRAPHY.headline, { color: theme.accentOnSolid }]}>Зберегти</Text>
+          </InteractiveSurface>
+        </View>
+      </AppBottomSheet>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.sm,
+  },
+  headerTitleWrap: {
+    flex: 1,
+  },
+  subtitle: {
+    marginTop: 2,
+  },
+  addCircleButton: {
+    width: LAYOUT.iconButtonVisualSize,
+    height: LAYOUT.iconButtonVisualSize,
+    borderRadius: RADII.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: 96,
+  },
+  emptyIconBadge: {
+    width: 72,
+    height: 72,
+    borderRadius: RADII.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    marginTop: SPACING.md,
+    textAlign: 'center',
+  },
+  emptyBody: {
+    marginTop: SPACING.xs,
+    textAlign: 'center',
+  },
+  emptyCtaOuter: {
+    marginTop: SPACING.xl,
+    width: '100%',
+    maxWidth: 300,
+  },
+  emptyCtaButton: {
+    minHeight: 52,
+    borderRadius: RADII.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: LAYOUT.screenHorizontal,
+    paddingTop: SPACING.xxs,
+    paddingBottom: LAYOUT.tabBarClearance,
+    gap: SPACING.sm,
+  },
+  card: {
+    borderRadius: RADII.xl,
+    padding: LAYOUT.cardPadding,
+  },
+  cardTop: {
+    gap: 6,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+  },
+  groupPill: {
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: RADII.pill,
+  },
+  primaryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: RADII.pill,
+  },
+  cardLabel: {
+    marginTop: 2,
+  },
+  cardAddress: {
+    lineHeight: 20,
+  },
+  cardActions: {
+    marginTop: SPACING.sm + 2,
+    paddingTop: SPACING.sm,
+    borderTopWidth: LAYOUT.borderWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  mainActionOuter: {
+    flex: 1,
+  },
+  mainActionButton: {
+    minHeight: 42,
+    borderRadius: RADII.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: SPACING.sm,
+  },
+  mainActionText: {
+    fontWeight: '600',
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: RADII.md,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  labelInput: {
+    borderRadius: RADII.md + 2,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 13,
+    minHeight: 48,
+  },
+  presetsWrap: {
+    marginTop: SPACING.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.xs,
+  },
+  presetChip: {
+    minHeight: 36,
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 7,
+    borderRadius: RADII.pill,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetActions: {
+    marginTop: SPACING.lg,
+    flexDirection: 'row',
+    gap: SPACING.sm - 2,
+  },
+  sheetActionFlex: {
+    flex: 1,
+  },
+  sheetSecondaryBtn: {
+    minHeight: 50,
+    borderRadius: RADII.lg,
+    borderWidth: LAYOUT.borderWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetPrimaryBtn: {
+    minHeight: 50,
+    borderRadius: RADII.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
