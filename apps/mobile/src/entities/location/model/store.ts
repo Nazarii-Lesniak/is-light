@@ -61,10 +61,14 @@ export const useAppStore = create<AppState>()(
 
       addLocation: (location, makePrimary) => {
         set((state) => {
-          const exists = state.locations.some((item) => item.id === location.id);
-          if (exists) {
+          const existing = state.locations.find(
+            (item) =>
+              item.id === location.id ||
+              (item.streetId === location.streetId && item.buildingName === location.buildingName),
+          );
+          if (existing) {
             return {
-              primaryLocationId: makePrimary ? location.id : state.primaryLocationId,
+              primaryLocationId: makePrimary ? existing.id : state.primaryLocationId,
             };
           }
 
@@ -167,7 +171,11 @@ export const useAppStore = create<AppState>()(
         lastActiveReminderMinutes: state.lastActiveReminderMinutes,
         themeId: state.themeId,
       }),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          useAppStore.getState().setHasHydrated(true);
+          return;
+        }
         state?.setHasHydrated(true);
       },
     },

@@ -5,7 +5,7 @@ import { OutageGrid } from '@/entities/schedule/ui/OutageGrid';
 import { LocationPickerModal } from '@/features/location-picker/ui/LocationPickerModal';
 import { NotificationSettingsModal } from '@/features/notification-settings/ui/NotificationSettingsModal';
 import { ThemePickerModal } from '@/features/theme-picker/ui/ThemePickerModal';
-import { formatUkrainianDateLabel } from '@is-light/shared';
+import { formatKyivDate, formatUkrainianDateLabel } from '@is-light/shared';
 import { useRouter } from 'expo-router';
 import {
   Bell,
@@ -17,7 +17,7 @@ import {
   RefreshCw,
   Zap,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -42,15 +42,19 @@ export function HomeDashboard() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [themePickerVisible, setThemePickerVisible] = useState(false);
 
-  const currentSchedule = primaryLocation
-    ? (schedulesByGroup[primaryLocation.groupId] ?? null)
-    : null;
+  const primaryGroupId = primaryLocation?.groupId ?? null;
+  const currentSchedule = primaryGroupId ? (schedulesByGroup[primaryGroupId] ?? null) : null;
+  const activeRequestRef = useRef<AbortController | null>(null);
 
   const loadSchedule = useCallback(
     async (mode: 'initial' | 'refresh') => {
-      if (!primaryLocation) {
+      if (!primaryGroupId) {
         return;
       }
+
+      activeRequestRef.current?.abort();
+      const controller = new AbortController();
+      activeRequestRef.current = controller;
 
       if (mode === 'refresh') {
         setIsRefreshing(true);
@@ -60,11 +64,18 @@ export function HomeDashboard() {
       setFetchError(null);
 
       try {
-        const data = await fetchGroupSchedule(primaryLocation.groupId, {
+        const data = await fetchGroupSchedule(primaryGroupId, {
           forceRefresh: mode === 'refresh',
+          signal: controller.signal,
         });
-        setScheduleForGroup(primaryLocation.groupId, data);
+        if (controller.signal.aborted) {
+          return;
+        }
+        setScheduleForGroup(primaryGroupId, data);
       } catch (err: unknown) {
+        if (controller.signal.aborted) {
+          return;
+        }
         setOfflineCache(true);
         setFetchError(
           err instanceof Error
@@ -72,19 +83,25 @@ export function HomeDashboard() {
             : 'Не вдалося оновити графік. Показано останні збережені дані.',
         );
       } finally {
-        setIsRefreshing(false);
-        setIsInitialLoading(false);
+        if (activeRequestRef.current === controller) {
+          setIsRefreshing(false);
+          setIsInitialLoading(false);
+          activeRequestRef.current = null;
+        }
       }
     },
-    [primaryLocation, setOfflineCache, setScheduleForGroup],
+    [primaryGroupId, setOfflineCache, setScheduleForGroup],
   );
 
   useEffect(() => {
-    if (!primaryLocation) {
+    if (!primaryGroupId) {
       return;
     }
     void loadSchedule('initial');
-  }, [primaryLocation, loadSchedule]);
+    return () => {
+      activeRequestRef.current?.abort();
+    };
+  }, [primaryGroupId, loadSchedule]);
 
   if (!primaryLocation) {
     return (
@@ -152,8 +169,13 @@ export function HomeDashboard() {
     );
   }
 
-  const todaySchedule = currentSchedule?.today ?? null;
-  const tomorrowSchedule = currentSchedule?.tomorrow ?? null;
+  const todayKyivDate = formatKyivDate(new Date());
+  const rawToday = currentSchedule?.today ?? null;
+  const rawTomorrow = currentSchedule?.tomorrow ?? null;
+  const rolledOverFromCache =
+    rawToday?.date !== todayKyivDate && rawTomorrow?.date === todayKyivDate;
+  const todaySchedule = rolledOverFromCache ? rawTomorrow : rawToday;
+  const tomorrowSchedule = rolledOverFromCache ? null : rawTomorrow;
   const activeDaySchedule = selectedDay === 'today' ? todaySchedule : tomorrowSchedule;
   const hasActiveSchedule = Boolean(
     activeDaySchedule?.isPublished && activeDaySchedule.slots.length === 48,
@@ -181,7 +203,6 @@ export function HomeDashboard() {
           />
         }
       >
-        {/* Хедер локації + тема + сповіщення */}
         <View className="flex-row items-center justify-between gap-2">
           <Pressable
             onPress={() => setPickerVisible(true)}
@@ -241,7 +262,6 @@ export function HomeDashboard() {
           </Pressable>
         </View>
 
-        {/* Блок поточного стану */}
         <CurrentStatusCard
           today={todaySchedule}
           tomorrow={tomorrowSchedule}
@@ -276,7 +296,6 @@ export function HomeDashboard() {
           </View>
         ) : null}
 
-        {/* Сегментний перемикач дня */}
         <View className="flex-row rounded-xl p-1" style={{ backgroundColor: theme.segmentTrack }}>
           <Pressable
             onPress={() => setSelectedDay('today')}
@@ -311,7 +330,6 @@ export function HomeDashboard() {
           </Pressable>
         </View>
 
-        {/* Заголовок дати */}
         <View className="flex-row items-center justify-between px-1">
           <Text className="text-xs font-bold" style={{ color: theme.text }}>
             {selectedDay === 'today' ? 'Графік на сьогодні' : 'Графік на завтра'}
@@ -328,7 +346,6 @@ export function HomeDashboard() {
           ) : null}
         </View>
 
-        {/* Перевіряємо наявність графіка перед відображенням сітки */}
         {hasActiveSchedule && activeDaySchedule ? (
           <View key={`grid-${selectedDay}`}>
             <OutageGrid

@@ -27,7 +27,10 @@ export function usePushSync(): void {
   const lastForegroundRefreshRef = useRef<number>(Date.now());
   const appStateRef = useRef<string>(AppState.currentState ?? 'active');
 
-  // Реєстрація push-сповіщень при запуску (безпечно перехоплює обмеження Expo Go на iOS)
+  const primaryGroupId = primaryLocation?.groupId ?? null;
+  const primaryTitle = primaryLocation ? getLocationDisplayTitle(primaryLocation) : null;
+  const primarySchedule = primaryGroupId ? (schedulesByGroup[primaryGroupId] ?? null) : null;
+
   useEffect(() => {
     configureForegroundNotificationHandler();
     let active = true;
@@ -50,36 +53,32 @@ export function usePushSync(): void {
     };
   }, [setPushRegistration]);
 
-  // Синхронізація remote push підписки на сервері при зміні основної локації
   useEffect(() => {
     if (!hasHydrated || !expoPushToken || !pushPlatform) {
       return;
     }
 
-    if (primaryLocation) {
+    if (primaryGroupId) {
       upsertPushSubscription({
         expoPushToken,
-        groupId: primaryLocation.groupId,
+        groupId: primaryGroupId,
         platform: pushPlatform,
       }).catch(() => {});
     } else {
       deletePushSubscription(expoPushToken).catch(() => {});
     }
-  }, [hasHydrated, expoPushToken, pushPlatform, primaryLocation]);
+  }, [hasHydrated, expoPushToken, pushPlatform, primaryGroupId]);
 
-  // Автоматичне оновлення графіка при отриманні push-сповіщення або поверненні з фону
   useEffect(() => {
-    if (!hasHydrated || !primaryLocation) {
+    if (!hasHydrated || !primaryGroupId) {
       return;
     }
 
-    const groupId = primaryLocation.groupId;
-
     const refreshPrimarySchedule = (forceRefresh: boolean) => {
       lastForegroundRefreshRef.current = Date.now();
-      fetchGroupSchedule(groupId, { forceRefresh })
+      fetchGroupSchedule(primaryGroupId, { forceRefresh })
         .then((data) => {
-          setScheduleForGroup(groupId, data);
+          setScheduleForGroup(primaryGroupId, data);
         })
         .catch(() => {});
     };
@@ -116,19 +115,14 @@ export function usePushSync(): void {
       responseSub.remove();
       appStateSub.remove();
     };
-  }, [hasHydrated, primaryLocation, setScheduleForGroup]);
-
-  // Перерахунок локальних нагадувань перед відключенням при зміні графіка, інтервалу або локації
-  const primarySchedule = primaryLocation
-    ? (schedulesByGroup[primaryLocation.groupId] ?? null)
-    : null;
+  }, [hasHydrated, primaryGroupId, setScheduleForGroup]);
 
   useEffect(() => {
     if (!hasHydrated) {
       return;
     }
 
-    if (!primaryLocation || reminderMinutes === 0) {
+    if (!primaryGroupId || !primaryTitle || reminderMinutes === 0) {
       cancelScheduledOutageReminders().catch(() => {});
       return;
     }
@@ -136,8 +130,8 @@ export function usePushSync(): void {
     rescheduleLocalOutageReminders({
       schedule: primarySchedule,
       reminderMinutes,
-      locationTitle: getLocationDisplayTitle(primaryLocation),
-      groupId: primaryLocation.groupId,
+      locationTitle: primaryTitle,
+      groupId: primaryGroupId,
     }).catch(() => {});
-  }, [hasHydrated, primaryLocation, primarySchedule, reminderMinutes]);
+  }, [hasHydrated, primaryGroupId, primaryTitle, primarySchedule, reminderMinutes]);
 }

@@ -7,7 +7,7 @@ import {
   slotsToHourCells,
 } from '@is-light/shared';
 import { Clock, HelpCircle, Zap, ZapOff } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 interface OutageGridProps {
@@ -36,7 +36,19 @@ function getCellDescriptionUk(cell: HourCell): string {
 export function OutageGrid({ slots, highlightCurrentHour }: OutageGridProps) {
   const theme = useAppTheme();
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
-  const currentHour = highlightCurrentHour ? getKyivCurrentHour(new Date()) : -1;
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!highlightCurrentHour) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [highlightCurrentHour]);
+
+  const currentHour = highlightCurrentHour ? getKyivCurrentHour(now) : -1;
 
   const cells = useMemo(() => {
     const resolved = slots && slots.length === 48 ? slots : createSlots('unknown');

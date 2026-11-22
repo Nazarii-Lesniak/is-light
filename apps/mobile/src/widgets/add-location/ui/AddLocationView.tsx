@@ -5,7 +5,7 @@ import { useAddressSearch } from '@/features/address-search/model/useAddressSear
 import { type AddressSearchItem, type CityItem, LVIV_CITY_ID } from '@is-light/shared';
 import { useRouter } from 'expo-router';
 import { Building2, Check, ChevronDown, MapPin, Search, Tag, X } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,6 +41,8 @@ export function AddLocationView() {
   const [cityQuery, setCityQuery] = useState('');
   const [cityResults, setCityResults] = useState<CityItem[]>([]);
   const [isCitiesLoading, setIsCitiesLoading] = useState(false);
+  const [cityError, setCityError] = useState<string | null>(null);
+  const cityAbortRef = useRef<AbortController | null>(null);
 
   const [query, setQuery] = useState('');
   const [selectedAddress, setSelectedAddress] = useState<AddressSearchItem | null>(null);
@@ -48,40 +50,49 @@ export function AddLocationView() {
 
   const { items, isLoading, error, hasSearched } = useAddressSearch(query, selectedCity.id);
 
-  // Завантаження населених пунктів Львівської області у модалі
+  const fetchCities = useCallback((search: string) => {
+    cityAbortRef.current?.abort();
+    const controller = new AbortController();
+    cityAbortRef.current = controller;
+
+    setIsCitiesLoading(true);
+    setCityError(null);
+
+    searchOblastCities(search, controller.signal)
+      .then((res) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setCityResults(res.items);
+        setIsCitiesLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setIsCitiesLoading(false);
+        setCityError(
+          err instanceof Error ? err.message : 'Не вдалося завантажити список населених пунктів.',
+        );
+      });
+  }, []);
+
   useEffect(() => {
     if (!cityModalVisible) {
+      cityAbortRef.current?.abort();
       return;
     }
 
-    const controller = new AbortController();
-    setIsCitiesLoading(true);
-
-    const timer = setTimeout(
-      () => {
-        searchOblastCities(cityQuery, controller.signal)
-          .then((res) => {
-            if (controller.signal.aborted) {
-              return;
-            }
-            setCityResults(res.items);
-            setIsCitiesLoading(false);
-          })
-          .catch(() => {
-            if (controller.signal.aborted) {
-              return;
-            }
-            setIsCitiesLoading(false);
-          });
-      },
-      cityQuery.trim() ? 250 : 0,
-    );
+    const delay = cityQuery.trim() ? 250 : 0;
+    const timer = setTimeout(() => {
+      fetchCities(cityQuery);
+    }, delay);
 
     return () => {
       clearTimeout(timer);
-      controller.abort();
+      cityAbortRef.current?.abort();
     };
-  }, [cityModalVisible, cityQuery]);
+  }, [cityModalVisible, cityQuery, fetchCities]);
 
   const handleSelectCity = (city: CityItem) => {
     setSelectedCity(city);
@@ -308,7 +319,6 @@ export function AddLocationView() {
           </ScrollView>
         ) : (
           <View className="flex-1 px-4 pt-1">
-            {/* Вибір населеного пункту Львівської області */}
             <Pressable
               onPress={() => setCityModalVisible(true)}
               className="mb-2.5 flex-row items-center justify-between rounded-2xl border px-3.5 py-2.5"
@@ -335,7 +345,6 @@ export function AddLocationView() {
               <ChevronDown size={18} color={theme.textMuted} />
             </Pressable>
 
-            {/* Однорядковий пошук вулиці та будинку */}
             <View
               className="flex-row items-center rounded-2xl border px-3.5"
               style={{ backgroundColor: theme.surface, borderColor: theme.border }}
@@ -485,7 +494,6 @@ export function AddLocationView() {
         )}
       </KeyboardAvoidingView>
 
-      {/* Модал вибору населеного пункту Львівської області */}
       <Modal
         visible={cityModalVisible}
         transparent
@@ -559,7 +567,31 @@ export function AddLocationView() {
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
               >
-                {cityResults.length === 0 && !isCitiesLoading ? (
+                {cityError && !isCitiesLoading ? (
+                  <View
+                    className="items-center rounded-2xl border px-4 py-6"
+                    style={{ backgroundColor: theme.dangerBg, borderColor: theme.dangerBorder }}
+                  >
+                    <Text
+                      className="text-center text-sm font-medium"
+                      style={{ color: theme.dangerText }}
+                    >
+                      {cityError}
+                    </Text>
+                    <Pressable
+                      onPress={() => fetchCities(cityQuery)}
+                      className="mt-3 rounded-xl px-4 py-2"
+                      style={{ backgroundColor: theme.accent }}
+                    >
+                      <Text
+                        className="text-xs font-semibold"
+                        style={{ color: theme.accentOnSolid }}
+                      >
+                        Спробувати ще раз
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : cityResults.length === 0 && !isCitiesLoading ? (
                   <View className="items-center py-8">
                     <Text className="text-sm" style={{ color: theme.textMuted }}>
                       Населених пунктів не знайдено

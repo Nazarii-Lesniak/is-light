@@ -33,7 +33,9 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     }
   }
 
+  let timedOut = false;
   const timer = setTimeout(() => {
+    timedOut = true;
     controller.abort();
   }, timeoutMs);
 
@@ -57,13 +59,16 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
         } else if (errPayload.message) {
           message = errPayload.message;
         }
-      } catch {
-        // Keep default Ukrainian error message
-      }
+      } catch {}
       throw new ApiError(message, response.status);
     }
 
     return (await response.json()) as T;
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiError('Час очікування відповіді сервера вичерпано. Спробуйте ще раз.', 408);
+    }
+    throw error;
   } finally {
     clearTimeout(timer);
     if (signal) {

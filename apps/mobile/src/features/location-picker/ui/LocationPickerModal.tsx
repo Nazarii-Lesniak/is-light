@@ -37,19 +37,23 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
     });
   }, [locations, searchQuery]);
 
-  const handleSelect = (location: SavedLocation) => {
-    setPrimaryLocation(location.id);
+  const handleClose = () => {
     setSearchQuery('');
     onClose();
   };
 
+  const handleSelect = (location: SavedLocation) => {
+    setPrimaryLocation(location.id);
+    handleClose();
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <KeyboardAvoidingView
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <Pressable className="flex-1 justify-end bg-black/50" onPress={onClose}>
+        <Pressable className="flex-1 justify-end bg-black/50" onPress={handleClose}>
           <Pressable
             className="max-h-[80%] rounded-t-3xl px-5 pb-8 pt-4"
             style={{
@@ -69,7 +73,7 @@ export function LocationPickerModal({ visible, onClose }: LocationPickerModalPro
                 Основна локація
               </Text>
               <Pressable
-                onPress={onClose}
+                onPress={handleClose}
                 className="h-9 w-9 items-center justify-center rounded-full"
                 style={{ backgroundColor: theme.surfaceMuted }}
                 accessibilityLabel="Закрити"

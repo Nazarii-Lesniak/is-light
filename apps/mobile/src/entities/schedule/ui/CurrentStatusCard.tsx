@@ -5,7 +5,7 @@ import {
   formatKyivTime,
   getCurrentPowerStatus,
 } from '@is-light/shared';
-import { Clock, WifiOff, Zap, ZapOff } from 'lucide-react-native';
+import { Clock, HelpCircle, WifiOff, Zap, ZapOff } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 
@@ -33,24 +33,45 @@ export function CurrentStatusCard({
   }, []);
 
   const summary = getCurrentPowerStatus(today, tomorrow, now);
-  const isOff = summary.status === 'off';
   const hasPublishedToday = Boolean(today?.isPublished);
+  const isOff = summary.status === 'off';
+  const isUnknownWithSchedule = hasPublishedToday && summary.status === 'unknown';
 
-  const bgColor = isOff ? theme.offBg : theme.onBg;
-  const borderColor = isOff ? theme.offBorder : theme.onBorder;
-  const iconBgColor = isOff ? theme.offHalfBg : theme.onHalfBg;
-  const iconColor = isOff ? theme.offIcon : theme.onIcon;
-  const textColor = isOff ? theme.offText : theme.onText;
+  const bgColor = isOff ? theme.offBg : isUnknownWithSchedule ? theme.unknownBg : theme.onBg;
+  const borderColor = isOff
+    ? theme.offBorder
+    : isUnknownWithSchedule
+      ? theme.unknownBorder
+      : theme.onBorder;
+  const iconBgColor = isOff
+    ? theme.offHalfBg
+    : isUnknownWithSchedule
+      ? theme.surfaceMuted
+      : theme.onHalfBg;
+  const iconColor = isOff
+    ? theme.offIcon
+    : isUnknownWithSchedule
+      ? theme.unknownText
+      : theme.onIcon;
+  const textColor = isOff
+    ? theme.offText
+    : isUnknownWithSchedule
+      ? theme.unknownText
+      : theme.onText;
 
   const titleText = isOff
     ? 'Зараз немає світла'
-    : hasPublishedToday
-      ? 'Зараз є світло'
-      : 'Є світло';
+    : isUnknownWithSchedule
+      ? 'Немає актуальних даних'
+      : hasPublishedToday
+        ? 'Зараз є світло'
+        : 'Є світло';
 
   let countdownText = 'До кінця доступного графіка змін не заплановано';
   if (!hasPublishedToday) {
     countdownText = 'Графік відключень на сьогодні не застосовується';
+  } else if (isUnknownWithSchedule) {
+    countdownText = 'Потягніть вниз, щоб оновити графік на поточну добу';
   } else if (summary.nextChangeAt && summary.msUntilChange !== null) {
     const actionLabel = summary.nextStatus === 'off' ? 'Відключення' : 'Увімкнення';
     const timeLabel = formatKyivTime(summary.nextChangeAt);
@@ -70,7 +91,13 @@ export function CurrentStatusCard({
           className="h-10 w-10 items-center justify-center rounded-xl"
           style={{ backgroundColor: iconBgColor }}
         >
-          {isOff ? <ZapOff size={20} color={iconColor} /> : <Zap size={20} color={iconColor} />}
+          {isOff ? (
+            <ZapOff size={20} color={iconColor} />
+          ) : isUnknownWithSchedule ? (
+            <HelpCircle size={20} color={iconColor} />
+          ) : (
+            <Zap size={20} color={iconColor} />
+          )}
         </View>
 
         <View className="flex-1">

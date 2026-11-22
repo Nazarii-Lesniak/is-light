@@ -60,14 +60,34 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return requested.status === 'granted';
 }
 
+let reminderOperationQueue: Promise<unknown> = Promise.resolve();
+let latestRescheduleSeq = 0;
+
+function enqueueReminderOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const next = reminderOperationQueue.then(operation, operation);
+  reminderOperationQueue = next.catch(() => {});
+  return next;
+}
+
 export async function registerForPushNotificationsSafe(): Promise<PushRegistrationResult> {
   const platform: PushPlatform = Platform.OS === 'ios' ? 'ios' : 'android';
 
+  if (Platform.OS === 'web') {
+    return {
+      token: null,
+      platform,
+      permissionGranted: false,
+      remoteUnavailableReason: 'Push-сповіщення доступні лише у мобільному додатку.',
+    };
+  }
+
+  let permissionGranted = false;
+
   try {
     await ensureNotificationChannels();
-    const granted = await requestNotificationPermission();
+    permissionGranted = await requestNotificationPermission();
 
-    if (!granted) {
+    if (!permissionGranted) {
       return {
         token: null,
         platform,
@@ -109,7 +129,6 @@ export async function registerForPushNotificationsSafe(): Promise<PushRegistrati
       remoteUnavailableReason: null,
     };
   } catch (error) {
-    // Gracefully handle Expo Go iOS/Android limitations without crashing or blocking local reminders
     const isIosExpoGo = Platform.OS === 'ios' && Constants.appOwnership === 'expo';
     const reason = isIosExpoGo
       ? 'У Expo Go на iOS віддалені push-сповіщення недоступні без платного Apple Developer Account. Локальні нагадування перед відключенням працюють у звичайному режимі.'
@@ -120,13 +139,17 @@ export async function registerForPushNotificationsSafe(): Promise<PushRegistrati
     return {
       token: null,
       platform,
-      permissionGranted: true,
+      permissionGranted,
       remoteUnavailableReason: reason,
     };
   }
 }
 
-export async function cancelScheduledOutageReminders(): Promise<void> {
+async function cancelScheduledOutageRemindersInternal(): Promise<void> {
+  if (Platform.OS === 'web') {
+    return;
+  }
+
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
   const outageIds = scheduled
     .filter((item) => {
@@ -140,63 +163,81 @@ export async function cancelScheduledOutageReminders(): Promise<void> {
   );
 }
 
-export async function rescheduleLocalOutageReminders(params: {
+export function cancelScheduledOutageReminders(): Promise<void> {
+  latestRescheduleSeq += 1;
+  return enqueueReminderOperation(() => cancelScheduledOutageRemindersInternal());
+}
+
+export function rescheduleLocalOutageReminders(params: {
   schedule: GroupScheduleResponse | null;
   reminderMinutes: ReminderMinutes;
   locationTitle: string;
   groupId: GroupId;
 }): Promise<number> {
-  await cancelScheduledOutageReminders();
+  latestRescheduleSeq += 1;
+  const currentSeq = latestRescheduleSeq;
 
-  if (params.reminderMinutes <= 0 || !params.schedule) {
-    return 0;
-  }
-
-  const granted = await requestNotificationPermission().catch(() => false);
-  if (!granted) {
-    return 0;
-  }
-
-  await ensureNotificationChannels().catch(() => {});
-
-  const now = new Date();
-  const transitions = getUpcomingOutageTransitions(
-    params.schedule.today,
-    params.schedule.tomorrow,
-    now,
-  );
-
-  let scheduledCount = 0;
-
-  for (const transition of transitions) {
-    const triggerTimeMs = transition.startAt.getTime() - params.reminderMinutes * 60_000;
-    if (triggerTimeMs <= now.getTime() + 5_000) {
-      continue;
+  return enqueueReminderOperation(async () => {
+    if (Platform.OS === 'web' || currentSeq !== latestRescheduleSeq) {
+      return 0;
     }
 
-    const timeRange = transition.endLabel
-      ? `з ${transition.startLabel} до ${transition.endLabel}`
-      : `о ${transition.startLabel}`;
+    await cancelScheduledOutageRemindersInternal();
 
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `Через ${params.reminderMinutes} хв відключення світла`,
-        body: `${params.locationTitle} (Група ${params.groupId}): вимкнення ${timeRange}.`,
-        sound: true,
-        data: {
-          kind: 'outage_reminder',
-          groupId: params.groupId,
-          startAt: transition.startAt.toISOString(),
+    if (params.reminderMinutes <= 0 || !params.schedule || currentSeq !== latestRescheduleSeq) {
+      return 0;
+    }
+
+    const granted = await requestNotificationPermission().catch(() => false);
+    if (!granted || currentSeq !== latestRescheduleSeq) {
+      return 0;
+    }
+
+    await ensureNotificationChannels().catch(() => {});
+
+    const now = new Date();
+    const transitions = getUpcomingOutageTransitions(
+      params.schedule.today,
+      params.schedule.tomorrow,
+      now,
+    );
+
+    let scheduledCount = 0;
+
+    for (const transition of transitions) {
+      if (currentSeq !== latestRescheduleSeq) {
+        return scheduledCount;
+      }
+
+      const triggerTimeMs = transition.startAt.getTime() - params.reminderMinutes * 60_000;
+      if (triggerTimeMs <= now.getTime() + 5_000) {
+        continue;
+      }
+
+      const timeRange = transition.endLabel
+        ? `з ${transition.startLabel} до ${transition.endLabel}`
+        : `о ${transition.startLabel}`;
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `Через ${params.reminderMinutes} хв відключення світла`,
+          body: `${params.locationTitle} (Група ${params.groupId}): вимкнення ${timeRange}.`,
+          sound: true,
+          data: {
+            kind: 'outage_reminder',
+            groupId: params.groupId,
+            startAt: transition.startAt.toISOString(),
+          },
         },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: new Date(triggerTimeMs),
-        channelId: Platform.OS === 'android' ? OUTAGE_REMINDER_CHANNEL_ID : undefined,
-      },
-    });
-    scheduledCount += 1;
-  }
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: new Date(triggerTimeMs),
+          channelId: Platform.OS === 'android' ? OUTAGE_REMINDER_CHANNEL_ID : undefined,
+        },
+      });
+      scheduledCount += 1;
+    }
 
-  return scheduledCount;
+    return scheduledCount;
+  });
 }

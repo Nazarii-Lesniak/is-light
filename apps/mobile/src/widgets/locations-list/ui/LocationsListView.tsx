@@ -18,6 +18,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const LABEL_PRESETS = ['Дім', 'Робота', 'Батьки', 'Офіс'] as const;
 
+function getUkrainianLocationWord(count: number): string {
+  const mod100 = count % 100;
+  const mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 19) {
+    return 'локацій';
+  }
+  if (mod10 === 1) {
+    return 'локація';
+  }
+  if (mod10 >= 2 && mod10 <= 4) {
+    return 'локації';
+  }
+  return 'локацій';
+}
+
 export function LocationsListView() {
   const router = useRouter();
   const theme = useAppTheme();
@@ -71,12 +86,7 @@ export function LocationsListView() {
     ]);
   };
 
-  const locationWord =
-    locations.length === 1
-      ? 'локація'
-      : locations.length >= 2 && locations.length <= 4
-        ? 'локації'
-        : 'локацій';
+  const locationWord = getUkrainianLocationWord(locations.length);
 
   return (
     <SafeAreaView className="flex-1" style={{ backgroundColor: theme.bg }} edges={['top']}>
@@ -223,7 +233,6 @@ export function LocationsListView() {
         </ScrollView>
       )}
 
-      {/* Модал редагування мітки із захистом від перекриття клавіатурою */}
       <Modal
         visible={editingLocation !== null}
         transparent
