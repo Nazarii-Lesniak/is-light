@@ -12,10 +12,11 @@ import { streetsCache } from '../db/schema.js';
 const CITIES_TTL_MS = 24 * 60 * 60 * 1000;
 const STREETS_TTL_MS = 24 * 60 * 60 * 1000;
 const BUILDINGS_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_CACHED_CITIES = 50;
+const MAX_CACHED_BUILDINGS = 500;
 const MAX_RESULTS = 20;
 const MAX_CITY_RESULTS = 25;
 
-// Популярні населені пункти Львівської області для швидкого вибору
 const POPULAR_CITY_IDS = [693, 65, 63, 1460, 2686, 1176, 1174, 789] as const;
 
 const LATIN_TO_CYRILLIC: Readonly<Record<string, string>> = {
@@ -72,7 +73,7 @@ export function parseAddressQuery(rawQuery: string): ParsedAddressQuery {
     return { streetQuery: '', buildingQuery: '' };
   }
 
-  const buildingMatch = cleaned.match(/^(.*?)\s+(\d+[а-яіїєґa-z0-9/\-]*)$/i);
+  const buildingMatch = cleaned.match(/^(.*?)\s+(\d+[а-яіїєґa-z0-9/\-]*(?:\s+[а-яіїєґa-z])?)$/i);
   if (buildingMatch?.[1] && buildingMatch[2]) {
     return {
       streetQuery: normalizeUkrainianText(buildingMatch[1]),
@@ -91,7 +92,10 @@ export function formatLvivAddress(
   buildingName: string,
   cityName?: string,
 ): string {
-  const hasPrefix = /^(?:вул\.|просп\.|пл\.|бульв\.|пров\.|наб\.|дорога)/i.test(streetName);
+  const hasPrefix =
+    /^(?:вул\.?|вулиця|просп\.?|пр-т\.?|проспект|пл\.?|площа|бульв\.?|бульвар|пров\.?|провулок|наб\.?|набережна|дорога)\s+/i.test(
+      streetName,
+    );
   const streetPart = `${hasPrefix ? '' : 'вул. '}${streetName}, ${buildingName}`;
   if (cityName && cityName.trim().toLowerCase() !== 'львів') {
     return `${cityName.trim()}, ${streetPart}`;
@@ -227,11 +231,26 @@ export class AddressSearchService {
     }
   }
 
+  private setBoundedCache<K, V>(cache: Map<K, V>, key: K, value: V, maxSize: number): void {
+    if (cache.has(key)) {
+      cache.delete(key);
+    } else if (cache.size >= maxSize) {
+      const oldestKey = cache.keys().next().value;
+      if (oldestKey !== undefined) {
+        cache.delete(oldestKey);
+      }
+    }
+    cache.set(key, value);
+  }
+
   private async ensureCityStreetsLoaded(cityId: number): Promise<CachedStreetEntry[]> {
     const now = Date.now();
     const mem = this.streetsMemoryByCity.get(cityId);
-    if (mem && now - mem.loadedAt < STREETS_TTL_MS) {
-      return mem.streets;
+    if (mem) {
+      if (now - mem.loadedAt < STREETS_TTL_MS) {
+        return mem.streets;
+      }
+      this.streetsMemoryByCity.delete(cityId);
     }
 
     const existing = this.streetsInFlightByCity.get(cityId);
@@ -261,20 +280,30 @@ export class AddressSearchService {
         .from(streetsCache)
         .where(eq(streetsCache.cityId, cityId));
 
-      const newestRow = dbRows[0];
-      if (dbRows.length > 0 && newestRow && now - newestRow.updatedAt.getTime() < STREETS_TTL_MS) {
+      let newestUpdatedAtMs = 0;
+      for (const row of dbRows) {
+        const ts = row.updatedAt.getTime();
+        if (ts > newestUpdatedAtMs) {
+          newestUpdatedAtMs = ts;
+        }
+      }
+
+      if (dbRows.length > 0 && now - newestUpdatedAtMs < STREETS_TTL_MS) {
         const entries: CachedStreetEntry[] = dbRows.map((row) => ({
           streetId: row.streetId,
           cityId: row.cityId,
           name: row.name,
           normalizedName: row.normalizedName,
         }));
-        this.streetsMemoryByCity.set(cityId, { streets: entries, loadedAt: now });
+        this.setBoundedCache(
+          this.streetsMemoryByCity,
+          cityId,
+          { streets: entries, loadedAt: now },
+          MAX_CACHED_CITIES,
+        );
         return entries;
       }
-    } catch {
-      // Fallback to live adapter
-    }
+    } catch {}
 
     const externalStreets: ExternalStreet[] = await this.adapter.fetchCityStreets(cityId);
     const entries: CachedStreetEntry[] = externalStreets.map((street) => ({
@@ -284,7 +313,12 @@ export class AddressSearchService {
       normalizedName: normalizeUkrainianText(street.name),
     }));
 
-    this.streetsMemoryByCity.set(cityId, { streets: entries, loadedAt: now });
+    this.setBoundedCache(
+      this.streetsMemoryByCity,
+      cityId,
+      { streets: entries, loadedAt: now },
+      MAX_CACHED_CITIES,
+    );
     this.persistStreetsCache(entries).catch(() => {});
 
     return entries;
@@ -323,8 +357,11 @@ export class AddressSearchService {
     const cacheKey = `${cityId}:${streetId}`;
     const now = Date.now();
     const mem = this.buildingsMemory.get(cacheKey);
-    if (mem && now - mem.loadedAt < BUILDINGS_TTL_MS) {
-      return mem.buildings;
+    if (mem) {
+      if (now - mem.loadedAt < BUILDINGS_TTL_MS) {
+        return mem.buildings;
+      }
+      this.buildingsMemory.delete(cacheKey);
     }
 
     const existingPromise = this.buildingsInFlight.get(cacheKey);
@@ -361,18 +398,23 @@ export class AddressSearchService {
         row.buildingsUpdatedAt &&
         now - row.buildingsUpdatedAt.getTime() < BUILDINGS_TTL_MS
       ) {
-        this.buildingsMemory.set(cacheKey, {
-          buildings: row.buildingsJson,
-          loadedAt: now,
-        });
+        this.setBoundedCache(
+          this.buildingsMemory,
+          cacheKey,
+          { buildings: row.buildingsJson, loadedAt: now },
+          MAX_CACHED_BUILDINGS,
+        );
         return row.buildingsJson;
       }
-    } catch {
-      // Fallback to live adapter
-    }
+    } catch {}
 
     const buildings = await this.adapter.fetchStreetBuildings(cityId, streetId);
-    this.buildingsMemory.set(cacheKey, { buildings, loadedAt: now });
+    this.setBoundedCache(
+      this.buildingsMemory,
+      cacheKey,
+      { buildings, loadedAt: now },
+      MAX_CACHED_BUILDINGS,
+    );
 
     this.db
       .update(streetsCache)

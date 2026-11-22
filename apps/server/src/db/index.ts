@@ -18,6 +18,10 @@ export function getPool(): Pool {
       connectionTimeoutMillis: 10_000,
       ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
     });
+
+    poolInstance.on('error', (error) => {
+      console.error('Помилка пулу зʼєднань PostgreSQL:', error);
+    });
   }
   return poolInstance;
 }

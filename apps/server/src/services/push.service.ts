@@ -31,7 +31,7 @@ export class PushService {
     const body =
       formattedDates.length > 0
         ? `Перевірте актуальні години відключень на ${formattedDates}.`
-        : 'Змінився графік відключень світла у Львові. Відкрийте додаток для деталей.';
+        : 'Змінився графік відключень світла. Відкрийте додаток для деталей.';
 
     return this.sendMessagesToTokens(
       subscribers.map((sub) => sub.expoPushToken),
@@ -80,7 +80,7 @@ export class PushService {
     tokens: string[],
     content: { title: string; body: string; data: Record<string, unknown> },
   ): Promise<number> {
-    const validTokens = tokens.filter((token) => Expo.isExpoPushToken(token));
+    const validTokens = Array.from(new Set(tokens.filter((token) => Expo.isExpoPushToken(token))));
     if (validTokens.length === 0) {
       return 0;
     }
@@ -110,6 +110,8 @@ export class PushService {
             if (msg && typeof msg.to === 'string') {
               invalidTokens.push(msg.to);
             }
+          } else {
+            console.error('Помилка Expo Push тікета:', ticket.message, ticket.details);
           }
         });
       } catch (error) {

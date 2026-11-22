@@ -10,11 +10,30 @@ const server = app.listen(env.PORT, () => {
   console.log(`Сервер «Є Світло» запущено на порту ${env.PORT} (${env.NODE_ENV})`);
 });
 
+let isShuttingDown = false;
+
 async function shutdown(signal: string): Promise<void> {
+  if (isShuttingDown) {
+    return;
+  }
+  isShuttingDown = true;
+
   console.log(`Отримано сигнал ${signal}. Завершення роботи...`);
+
+  const forceExitTimer = setTimeout(() => {
+    console.error('Примусове завершення роботи сервера через таймаут.');
+    process.exit(1);
+  }, 10_000);
+  forceExitTimer.unref();
+
   server.close(async () => {
-    await getPool().end();
-    process.exit(0);
+    try {
+      await getPool().end();
+      process.exit(0);
+    } catch (error) {
+      console.error('Помилка при закритті пулу БД:', error);
+      process.exit(1);
+    }
   });
 }
 

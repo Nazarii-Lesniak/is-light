@@ -93,7 +93,7 @@ export function parseLoeScheduleHtml(
       continue;
     }
 
-    const groupMatch = line.match(/Група\s+(\d\.\d)\.?\s*(.*)$/i);
+    const groupMatch = line.match(/Група\s+(\d\.\d)[:.\-–—]?\s*(.*)$/i);
     if (!groupMatch?.[1]) {
       continue;
     }
@@ -112,7 +112,8 @@ export function parseLoeScheduleHtml(
       let match = rangeRegex.exec(body);
       while (match !== null) {
         const startSlot = timeToSlotIndex(match[1] ?? '0', match[2] ?? '0');
-        const endSlot = timeToSlotIndex(match[3] ?? '0', match[4] ?? '0');
+        const rawEndSlot = timeToSlotIndex(match[3] ?? '0', match[4] ?? '0');
+        const endSlot = rawEndSlot === 0 && startSlot > 0 ? SLOT_COUNT : rawEndSlot;
 
         for (let idx = startSlot; idx < endSlot; idx++) {
           slots[idx] = 'off';
@@ -201,7 +202,6 @@ export class LoeScheduleAdapter implements ScheduleSourceAdapter {
   async fetchSchedules(): Promise<ExternalSchedulesPayload> {
     const fetchedAt = new Date();
 
-    // Fast path: lightweight ~2 KB individual menu_items requests instead of 2 MB full archive menu
     let [todayItem, tomorrowItem] = await Promise.all([
       this.fetchMenuItem(this.todayItemId).catch(() => null),
       this.fetchMenuItem(this.tomorrowItemId).catch(() => null),

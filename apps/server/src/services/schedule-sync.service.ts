@@ -9,7 +9,7 @@ import {
   addDaysToDateString,
   formatKyivDate,
 } from '@is-light/shared';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { ParsedDaySchedules, ScheduleSourceAdapter } from '../adapters/types.js';
 import type { Database } from '../db/index.js';
 import { schedules } from '../db/schema.js';
@@ -59,19 +59,20 @@ export class ScheduleSyncService {
 
   private async performSync(): Promise<SyncResult> {
     const payload = await this.scheduleAdapter.fetchSchedules();
-    const daysToProcess: ParsedDaySchedules[] = [];
+    const daysByDate = new Map<string, ParsedDaySchedules>();
 
     if (payload.today) {
-      daysToProcess.push(payload.today);
+      daysByDate.set(payload.today.date, payload.today);
     }
     if (payload.tomorrow) {
-      daysToProcess.push(payload.tomorrow);
+      daysByDate.set(payload.tomorrow.date, payload.tomorrow);
     }
 
+    const daysToProcess = Array.from(daysByDate.values());
     const syncedAt = new Date();
-    this.lastSyncedAtMs = syncedAt.getTime();
 
     if (daysToProcess.length === 0) {
+      this.lastSyncedAtMs = syncedAt.getTime();
       return {
         syncedAt: syncedAt.toISOString(),
         updatedGroups: [],
@@ -94,6 +95,14 @@ export class ScheduleSyncService {
       });
     }
 
+    const rowsToUpsert: Array<{
+      groupId: GroupId;
+      date: string;
+      slots: SlotStatus[];
+      sourceInfo: string | null;
+      contentHash: string;
+      updatedAt: Date;
+    }> = [];
     const changedDatesByGroup = new Map<GroupId, string[]>();
 
     for (const day of daysToProcess) {
@@ -113,25 +122,14 @@ export class ScheduleSyncService {
           continue;
         }
 
-        await this.db
-          .insert(schedules)
-          .values({
-            groupId,
-            date: day.date,
-            slots,
-            sourceInfo: day.sourceInfo,
-            contentHash: newHash,
-            updatedAt: syncedAt,
-          })
-          .onConflictDoUpdate({
-            target: [schedules.groupId, schedules.date],
-            set: {
-              slots,
-              sourceInfo: day.sourceInfo,
-              contentHash: newHash,
-              updatedAt: syncedAt,
-            },
-          });
+        rowsToUpsert.push({
+          groupId,
+          date: day.date,
+          slots,
+          sourceInfo: day.sourceInfo,
+          contentHash: newHash,
+          updatedAt: syncedAt,
+        });
 
         if (slotsChanged) {
           const existingDates = changedDatesByGroup.get(groupId) ?? [];
@@ -141,15 +139,39 @@ export class ScheduleSyncService {
       }
     }
 
-    const updatedGroups = Array.from(changedDatesByGroup.keys());
-    let notificationsSent = 0;
-
-    for (const [groupId, changedDates] of changedDatesByGroup.entries()) {
-      notificationsSent += await this.pushService.notifyGroupScheduleUpdated({
-        groupId,
-        changedDates,
-      });
+    if (rowsToUpsert.length > 0) {
+      await this.db
+        .insert(schedules)
+        .values(rowsToUpsert)
+        .onConflictDoUpdate({
+          target: [schedules.groupId, schedules.date],
+          set: {
+            slots: sql`excluded.slots`,
+            sourceInfo: sql`excluded.source_info`,
+            contentHash: sql`excluded.content_hash`,
+            updatedAt: sql`excluded.updated_at`,
+          },
+        });
     }
+
+    this.lastSyncedAtMs = syncedAt.getTime();
+
+    const updatedGroups = Array.from(changedDatesByGroup.keys());
+    const notificationCounts = await Promise.all(
+      Array.from(changedDatesByGroup.entries()).map(async ([groupId, changedDates]) => {
+        try {
+          return await this.pushService.notifyGroupScheduleUpdated({
+            groupId,
+            changedDates,
+          });
+        } catch (error) {
+          console.error(`Помилка надсилання push-сповіщень для групи ${groupId}:`, error);
+          return 0;
+        }
+      }),
+    );
+
+    const notificationsSent = notificationCounts.reduce((acc, count) => acc + count, 0);
 
     return {
       syncedAt: syncedAt.toISOString(),
@@ -182,7 +204,7 @@ export class ScheduleSyncService {
       : Number.POSITIVE_INFINITY;
 
     const shouldSync =
-      !todayRowInitial ||
+      (!todayRowInitial && msSinceLastSync >= REFRESH_COOLDOWN_MS) ||
       (options.forceRefresh && msSinceLastSync >= REFRESH_COOLDOWN_MS) ||
       (msSinceLastSync >= AUTO_STALE_TTL_MS && msSinceDbUpdate >= AUTO_STALE_TTL_MS);
 

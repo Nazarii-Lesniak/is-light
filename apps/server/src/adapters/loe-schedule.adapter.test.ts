@@ -28,9 +28,9 @@ describe('parseLoeScheduleHtml', () => {
     const g11 = parsed.groups['1.1'];
     assert.ok(g11);
     assert.equal(g11.length, 48);
-    assert.equal(g11[42], 'on'); // 21:00-21:30
-    assert.equal(g11[43], 'off'); // 21:30-22:00
-    assert.equal(g11[47], 'off'); // 23:30-24:00
+    assert.equal(g11[42], 'on');
+    assert.equal(g11[43], 'off');
+    assert.equal(g11[47], 'off');
 
     const g12 = parsed.groups['1.2'];
     assert.ok(g12);
@@ -38,10 +38,24 @@ describe('parseLoeScheduleHtml', () => {
 
     const g61 = parsed.groups['6.1'];
     assert.ok(g61);
-    assert.equal(g61[0], 'off'); // 00:00-00:30
-    assert.equal(g61[1], 'on'); // 00:30-01:00
-    assert.equal(g61[43], 'off'); // 21:30-22:00
-    assert.equal(g61[47], 'off'); // 23:30-24:00
+    assert.equal(g61[0], 'off');
+    assert.equal(g61[1], 'on');
+    assert.equal(g61[43], 'off');
+    assert.equal(g61[47], 'off');
+  });
+
+  it('коректно обробляє інтервал до 00:00 наприкінці доби', () => {
+    const html = `<div>
+      <p>Графік погодинних відключень на 22.11.2026</p>
+      <p>Група 1.1: Електроенергії немає з 21:30 до 00:00.</p>
+    </div>`;
+    const parsed = parseLoeScheduleHtml(html);
+    assert.ok(parsed);
+    const g11 = parsed.groups['1.1'];
+    assert.ok(g11);
+    assert.equal(g11[42], 'on');
+    assert.equal(g11[43], 'off');
+    assert.equal(g11[47], 'off');
   });
 
   it('повертає null для порожнього HTML (коли графік на завтра не опублікований)', () => {

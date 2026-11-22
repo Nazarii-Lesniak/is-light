@@ -6,6 +6,7 @@ import {
 } from '@is-light/shared';
 import cors from 'cors';
 import { eq, sql } from 'drizzle-orm';
+import { Expo } from 'expo-server-sdk';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { LoeAddressAdapter } from './adapters/loe-address.adapter.js';
@@ -17,9 +18,18 @@ import { AddressSearchService } from './services/address-search.service.js';
 import { PushService } from './services/push.service.js';
 import { ScheduleSyncService } from './services/schedule-sync.service.js';
 
+const MAX_SEARCH_QUERY_LENGTH = 100;
+
 const testPushSchema = z
   .object({
-    expoPushToken: z.string().min(10).optional(),
+    expoPushToken: z
+      .string()
+      .min(10)
+      .max(255)
+      .refine((token) => Expo.isExpoPushToken(token), {
+        message: 'Некоректний формат Expo Push Token',
+      })
+      .optional(),
     groupId: groupIdSchema.optional(),
     title: z.string().max(120).optional(),
     body: z.string().max(300).optional(),
@@ -43,6 +53,7 @@ function isCronSecretValid(req: Request, expectedSecret: string): boolean {
 
 export function createApp(db: Database, env: Env): express.Express {
   const app = express();
+  app.disable('x-powered-by');
 
   const addressAdapter = new LoeAddressAdapter({
     baseUrl: env.LOE_POWER_API_BASE_URL,
@@ -55,9 +66,13 @@ export function createApp(db: Database, env: Env): express.Express {
   const pushService = new PushService(db);
   const scheduleSyncService = new ScheduleSyncService(db, scheduleAdapter, pushService);
 
+  const corsOrigins = env.CORS_ORIGIN.split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   app.use(
     cors({
-      origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map((s) => s.trim()),
+      origin: env.CORS_ORIGIN.trim() === '*' || corsOrigins.length === 0 ? '*' : corsOrigins,
     }),
   );
   app.use(express.json({ limit: '100kb' }));
@@ -74,20 +89,27 @@ export function createApp(db: Database, env: Env): express.Express {
       res.status(503).json({
         status: 'error',
         db: 'disconnected',
-        message: error instanceof Error ? error.message : 'Помилка підключення до БД',
+        message:
+          env.NODE_ENV === 'production'
+            ? 'Помилка підключення до БД'
+            : error instanceof Error
+              ? error.message
+              : 'Помилка підключення до БД',
         timestamp: new Date().toISOString(),
       });
     }
   });
 
   app.get('/api/cities/search', async (req: Request, res: Response) => {
-    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const query =
+      typeof req.query.q === 'string' ? req.query.q.trim().slice(0, MAX_SEARCH_QUERY_LENGTH) : '';
     const items = await addressSearchService.searchCities(query);
     res.status(200).json({ query, items });
   });
 
   app.get('/api/addresses/search', async (req: Request, res: Response) => {
-    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const query =
+      typeof req.query.q === 'string' ? req.query.q.trim().slice(0, MAX_SEARCH_QUERY_LENGTH) : '';
     const rawCityId =
       typeof req.query.cityId === 'string'
         ? Number.parseInt(req.query.cityId, 10)
@@ -119,10 +141,10 @@ export function createApp(db: Database, env: Env): express.Express {
 
   app.post('/api/subscriptions', async (req: Request, res: Response) => {
     const parsed = upsertSubscriptionSchema.safeParse(req.body);
-    if (!parsed.success) {
+    if (!parsed.success || !Expo.isExpoPushToken(parsed.data.expoPushToken)) {
       res.status(400).json({
         error: 'Некоректні дані підписки',
-        details: parsed.error.flatten(),
+        details: parsed.success ? undefined : parsed.error.flatten(),
       });
       return;
     }
