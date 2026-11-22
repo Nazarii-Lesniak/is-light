@@ -36,6 +36,78 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 const LABEL_SUGGESTIONS = ['Дім', 'Робота', 'Батьки', 'Офіс'] as const;
 
+const LVIV_QUICK_EXAMPLES = [
+  'Вел 50',
+  'Городо 72а',
+  'Наук 19',
+  'Стрий 45',
+  'Чорнов 67',
+  'Кульпар 226а',
+  'Личак 34',
+  'Пасіч 85',
+  'Сихо 12',
+  'Зелен 115',
+  'Шевч 60',
+  'Франк 45',
+  'Бандер 12',
+  'Ольги 100',
+  'Мазеп 25',
+  'Вигов 29',
+  'Любін 92',
+  'Патон 22',
+  'Сахар 42',
+  'Антон 90',
+  'Копер 15',
+  'Дорош 31',
+  'Галиц 10',
+  'Крак 14',
+  'Замар 83',
+  'Варшав 138',
+  'Топол 4',
+  'Грінч 11',
+  'Лінкол 57',
+  'Хоткев 38',
+  'Драган 17',
+  'Чуприн 55',
+  'Коновал 88',
+  'Пекар 24',
+  'Левиц 64',
+  'Стуса 18',
+  'Угор 14',
+  'Вашинг 6',
+  'Тракт 150',
+  'Ряшів 13',
+  'Володимира Великого 50',
+  'Вулиця Городоцька 12',
+  'Проспект Свободи 18',
+  'Проспект Чорновола 67',
+  'Проспект Червоної Калини 62',
+  'Степана Бандери 12',
+  'Княгині Ольги 100',
+  'Героїв УПА 73',
+  'Івана Франка 45',
+  'Богдана Хмельницького 176',
+] as const;
+
+const OBLAST_QUICK_EXAMPLES = [
+  'Шевч 1',
+  'Франк 10',
+  'Галиц 5',
+  'Груш 12',
+  'Незал 15',
+  'Миру 4',
+  'Вокз 3',
+  'Зелен 6',
+  'Шкіл 2',
+  'Молод 18',
+  'Вулиця Шевченка 1',
+  'Івана Франка 10',
+  'Лесі Українки 8',
+  'Січових Стрільців 14',
+  'Богдана Хмельницького 22',
+  'Петра Сагайдачного 7',
+] as const;
+
 const DEFAULT_CITY: CityItem = {
   id: LVIV_CITY_ID,
   name: 'Львів',
@@ -54,11 +126,9 @@ export function AddLocationView() {
 
   const [selectedCity, setSelectedCity] = useState<CityItem>(DEFAULT_CITY);
   const [cityModalVisible, setCityModalVisible] = useState(false);
-  const [cityQuery, setCityQuery] = useState('');
   const [cityResults, setCityResults] = useState<CityItem[]>([]);
   const [isCitiesLoading, setIsCitiesLoading] = useState(false);
   const [cityError, setCityError] = useState<string | null>(null);
-  const [isCitySearchFocused, setIsCitySearchFocused] = useState(false);
   const cityAbortRef = useRef<AbortController | null>(null);
 
   const [query, setQuery] = useState('');
@@ -86,7 +156,7 @@ export function AddLocationView() {
     }).start();
   }, [hasSelectedAddress, stepAnim]);
 
-  const fetchCities = useCallback((search: string) => {
+  const fetchCities = useCallback(() => {
     cityAbortRef.current?.abort();
     const controller = new AbortController();
     cityAbortRef.current = controller;
@@ -94,7 +164,7 @@ export function AddLocationView() {
     setIsCitiesLoading(true);
     setCityError(null);
 
-    searchOblastCities(search, controller.signal)
+    searchOblastCities('', controller.signal)
       .then((res) => {
         if (controller.signal.aborted) {
           return;
@@ -119,23 +189,17 @@ export function AddLocationView() {
       return;
     }
 
-    const delay = cityQuery.trim() ? 250 : 0;
-    const timer = setTimeout(() => {
-      fetchCities(cityQuery);
-    }, delay);
+    fetchCities();
 
     return () => {
-      clearTimeout(timer);
       cityAbortRef.current?.abort();
     };
-  }, [cityModalVisible, cityQuery, fetchCities]);
+  }, [cityModalVisible, fetchCities]);
 
   const handleSelectCity = (city: CityItem) => {
     setSelectedCity(city);
     setQuery('');
     setSelectedAddress(null);
-    setCityQuery('');
-    setIsCitySearchFocused(false);
     setCityModalVisible(false);
   };
 
@@ -220,9 +284,7 @@ export function AddLocationView() {
   };
 
   const quickExamples =
-    selectedCity.id === LVIV_CITY_ID
-      ? ['вел 50', 'городоцька 12', 'стрийська 45']
-      : ['шевченка 1', 'франка 10', 'галицька 5'];
+    selectedCity.id === LVIV_CITY_ID ? LVIV_QUICK_EXAMPLES : OBLAST_QUICK_EXAMPLES;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]} edges={['top']}>
@@ -474,7 +536,7 @@ export function AddLocationView() {
                   onBlur={() => setIsSearchFocused(false)}
                   placeholder={
                     selectedCity.id === LVIV_CITY_ID
-                      ? 'Вулиця та будинок, напр.: вел 50'
+                      ? 'Вулиця та будинок, напр.: Вел 50'
                       : 'Введіть вулицю та номер будинку'
                   }
                   placeholderTextColor={theme.textMuted}
@@ -683,57 +745,21 @@ export function AddLocationView() {
 
       <AppBottomSheet
         visible={cityModalVisible}
-        onClose={() => {
-          setIsCitySearchFocused(false);
-          setCityModalVisible(false);
-        }}
+        onClose={() => setCityModalVisible(false)}
         title="Населений пункт"
-        subtitle="Понад 2 000 міст і сіл Львівської області"
-        avoidKeyboard
-        maxHeightRatio={0.84}
+        subtitle="Оберіть населений пункт Львівської області"
+        maxHeightRatio={0.8}
       >
-        <View
-          style={[
-            styles.modalSearchBox,
-            CONTINUOUS_CORNER,
-            {
-              backgroundColor: theme.surfaceInput,
-              borderColor: isCitySearchFocused ? theme.accent : theme.border,
-              borderWidth: isCitySearchFocused ? 1.5 : LAYOUT.borderWidth,
-            },
-          ]}
-        >
-          <Search size={18} color={isCitySearchFocused ? theme.accent : theme.textMuted} />
-          <TextInput
-            value={cityQuery}
-            onChangeText={setCityQuery}
-            onFocus={() => setIsCitySearchFocused(true)}
-            onBlur={() => setIsCitySearchFocused(false)}
-            placeholder="Пошук міста або села (напр.: Дрогобич, Стрий)…"
-            placeholderTextColor={theme.textMuted}
-            autoFocus
-            style={[TYPOGRAPHY.body, styles.modalSearchInput, { color: theme.text }]}
-          />
-          {isCitiesLoading ? (
-            <ActivityIndicator size="small" color={theme.accent} />
-          ) : cityQuery.length > 0 ? (
-            <Pressable
-              onPress={() => setCityQuery('')}
-              hitSlop={HIT_SLOP_STANDARD}
-              accessibilityLabel="Очистити пошук"
-            >
-              <X size={16} color={theme.textMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-
         <ScrollView
           style={styles.cityList}
           contentContainerStyle={styles.cityListContent}
-          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {cityError && !isCitiesLoading ? (
+          {isCitiesLoading ? (
+            <View style={styles.cityEmpty}>
+              <ActivityIndicator size="small" color={theme.accent} />
+            </View>
+          ) : cityError ? (
             <View
               style={[
                 styles.cityErrorBox,
@@ -748,7 +774,7 @@ export function AddLocationView() {
                 {cityError}
               </Text>
               <InteractiveSurface
-                onPress={() => fetchCities(cityQuery)}
+                onPress={fetchCities}
                 rippleTone="accent"
                 borderRadius={RADII.md}
                 style={styles.cityRetryOuter}
@@ -759,7 +785,7 @@ export function AddLocationView() {
                 </Text>
               </InteractiveSurface>
             </View>
-          ) : cityResults.length === 0 && !isCitiesLoading ? (
+          ) : cityResults.length === 0 ? (
             <View style={styles.cityEmpty}>
               <Text style={[TYPOGRAPHY.callout, { color: theme.textMuted }]}>
                 Населених пунктів не знайдено
@@ -916,9 +942,9 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
   },
   chip: {
-    minHeight: 36,
-    paddingHorizontal: SPACING.sm + 2,
-    paddingVertical: 7,
+    minHeight: 34,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
     borderRadius: RADII.pill,
     borderWidth: LAYOUT.borderWidth,
     alignItems: 'center',
@@ -1047,21 +1073,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  modalSearchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: RADII.md + 2,
-    paddingHorizontal: SPACING.sm,
-    minHeight: 46,
-    gap: SPACING.xs,
-  },
-  modalSearchInput: {
-    flex: 1,
-    paddingVertical: 10,
-  },
   cityList: {
-    marginTop: SPACING.sm,
-    maxHeight: 360,
+    maxHeight: 380,
   },
   cityListContent: {
     gap: SPACING.xs + 2,
